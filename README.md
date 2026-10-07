@@ -29,8 +29,9 @@ Launch it from the new icon. Give it a few seconds on first open so it can save 
 
 ## 3. Using it
 
-- Tap the three dots (top right) to import your D&D Beyond PDF. Export it from the character menu in D&D Beyond (Manage, then Export to PDF).
-- Re-import after each level up. Current HP and used resources are kept.
+- Import your D&D Beyond PDF from the first screen, or from the three dots (top right) to add another character. Export it in D&D Beyond (Manage, then Export to PDF).
+- Re-import the same character after a level up and it updates them. Current HP and used resources are kept, and a summary lists what changed.
+- The three dots menu also switches and deletes characters.
 - Your data is stored on the device you use. The installed app and the same page in a browser tab keep separate data, so import inside the installed app.
 - On iPhone and iPad, don't clear Safari website data, or the app's saved character is wiped. Re-importing the PDF restores it.
 
@@ -42,5 +43,5 @@ If a change doesn't show up, change `VERSION` at the top of `sw.js` (for example
 
 ## Notes
 
-- The built-in character is Darrow. "Reset to Darrow" in the menu restores him.
+- It starts empty. The first screen is an import. Add as many characters as you like from the menu and switch between them.
 - This is an unofficial fan tool and isn't affiliated with Wizards of the Coast or D&D Beyond.

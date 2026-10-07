@@ -1,6 +1,6 @@
 /* Combat HUD service worker: caches everything so the app works offline.
    To force every device to refresh after you change files, bump VERSION. */
-var VERSION='v1';
+var VERSION='v2';
 var CACHE='combat-hud-'+VERSION;
 var ASSETS=[
   './','./index.html','./manifest.webmanifest',
