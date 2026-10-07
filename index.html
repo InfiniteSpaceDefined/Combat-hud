@@ -1,0 +1,962 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Combat HUD</title>
+<meta name="theme-color" content="#10151a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#e9ece8" media="(prefers-color-scheme: light)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Combat HUD">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+@font-face{font-family:'Barlow Condensed';font-style:normal;font-weight:500;font-display:swap;src:url('fonts/barlow-condensed-latin-500-normal.woff2') format('woff2')}
+@font-face{font-family:'Barlow Condensed';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/barlow-condensed-latin-600-normal.woff2') format('woff2')}
+@font-face{font-family:'Barlow Condensed';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/barlow-condensed-latin-700-normal.woff2') format('woff2')}
+@font-face{font-family:'Instrument Sans';font-style:normal;font-weight:400;font-display:swap;src:url('fonts/instrument-sans-latin-400-normal.woff2') format('woff2')}
+@font-face{font-family:'Instrument Sans';font-style:normal;font-weight:500;font-display:swap;src:url('fonts/instrument-sans-latin-500-normal.woff2') format('woff2')}
+@font-face{font-family:'Instrument Sans';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/instrument-sans-latin-600-normal.woff2') format('woff2')}
+:root{
+  --bg:#e9ece8; --panel:#f7f8f5; --panel2:#ecefea; --line:#cdd3cc;
+  --ink:#1a2026; --mute:#5d6870; --accent:#1d7766; --accent-ink:#fff;
+  --act:#1d7766; --bon:#a67c1f; --rea:#4c5bb0; --hp:#b8403a;
+  --disp:'Barlow Condensed','Arial Narrow',system-ui,sans-serif;
+  --body:'Instrument Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10151a; --panel:#181f26; --panel2:#212a33; --line:#2f3a45;
+    --ink:#e6e8e3; --mute:#94a0aa; --accent:#5cbfa8; --accent-ink:#0d1a17;
+    --act:#5cbfa8; --bon:#d2a94d; --rea:#8e9cf0; --hp:#e0645d;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10151a; --panel:#181f26; --panel2:#212a33; --line:#2f3a45;
+  --ink:#e6e8e3; --mute:#94a0aa; --accent:#5cbfa8; --accent-ink:#0d1a17;
+  --act:#5cbfa8; --bon:#d2a94d; --rea:#8e9cf0; --hp:#e0645d;
+}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font:16px/1.45 var(--body);-webkit-text-size-adjust:100%}
+h1,h2,h3,p{margin:0}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+input[type=number],input[type=text]{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+input[type=number]{-moz-appearance:textfield;appearance:textfield}
+input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.muted{color:var(--mute);font-size:.92rem}
+
+.app{max-width:1200px;margin:0 auto;padding:12px 12px 40px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.top h1{font:700 clamp(1.9rem,5vw,2.6rem)/1 var(--disp)}
+.top p{color:var(--mute);font-size:.95rem}
+.icon{width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:var(--panel);font-size:1.3rem;line-height:1}
+.layout{display:grid;gap:14px}
+@media (min-width:740px){
+  .layout{grid-template-columns:minmax(300px,350px) minmax(0,1fr);align-items:start}
+  .side{position:sticky;top:12px}
+}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+.side{display:flex;flex-direction:column;gap:10px}
+.hpbig{display:flex;align-items:baseline;gap:6px}
+.hpbig b{font:700 clamp(3rem,10vw,3.6rem)/1 var(--disp)}
+.hpbig .of{font:500 1.8rem var(--disp);color:var(--mute)}
+.hpbig .tmpv{margin-left:auto;font-size:.9rem;color:var(--mute)}
+.bar{height:10px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:8px 0 10px}
+.bar i{display:block;height:100%;background:var(--hp);transition:width .2s}
+.hpctl{display:grid;grid-template-columns:1fr auto auto;gap:8px}
+.hpctl input{width:100%;text-align:center;font-size:1.1rem}
+.death{display:flex;gap:14px;align-items:center;margin-top:10px;flex-wrap:wrap;font-size:.9rem}
+.pip{width:26px;height:26px;border-radius:50%;border:2px solid var(--mute);background:transparent;padding:0}
+.pip.on.s{background:var(--accent);border-color:var(--accent)}
+.pip.on.f{background:var(--hp);border-color:var(--hp)}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 10px;text-align:left;display:flex;flex-direction:column;gap:2px}
+.tile .lbl{font-size:.8rem;color:var(--mute)}
+.tile .v{font:700 clamp(1.5rem,5.5vw,2.1rem)/1 var(--disp);white-space:nowrap}
+.trks{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px}
+.trk{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.trk .lbl{font-size:.82rem;color:var(--mute);display:block;margin-bottom:4px}
+.cnt{display:flex;align-items:center;gap:8px}
+.tv{display:flex;align-items:baseline;gap:6px;margin-bottom:6px}
+.tv b{font:700 2.1rem/1 var(--disp)}
+.tv .of{font:500 1.1rem var(--disp);color:var(--mute)}
+.tb{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tb .step-b{width:100%}
+.cnt b{font:700 2rem/1 var(--disp);min-width:1.1ch;text-align:center}
+.cnt .of{font:500 1.1rem var(--disp);color:var(--mute)}
+.step-b{width:42px;height:42px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);font-weight:600;font-size:1.2rem;padding:0}
+.rests{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.insp{border:1px solid var(--line);background:var(--panel2);border-radius:10px;padding:10px 6px;font-weight:600;min-height:46px}
+.insp[aria-pressed=true]{background:var(--bon);border-color:var(--bon);color:#111}
+
+.btn{border:1px solid var(--line);background:var(--panel2);border-radius:10px;padding:10px 14px;font-weight:600;min-height:46px}
+.btn:hover{border-color:var(--accent)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.dmg{background:var(--hp);border-color:var(--hp);color:#fff}
+.btn.big{width:100%;min-height:54px;font-size:1.05rem}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn.sel{border-color:var(--accent);box-shadow:inset 0 0 0 2px var(--accent)}
+
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:12px}
+.tabs button{border:0;background:transparent;border-radius:9px;padding:11px 8px;font-weight:600;min-height:46px}
+.tabs button[aria-selected=true]{background:var(--panel);box-shadow:0 0 0 1px var(--line)}
+
+.grp{background:var(--panel);border:1px solid var(--line);border-left:6px solid var(--line);border-radius:14px;margin-bottom:10px;overflow:hidden}
+.grp.act{border-left-color:var(--act)} .grp.bon{border-left-color:var(--bon)} .grp.rea{border-left-color:var(--rea)}
+.gh{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;background:transparent;border:0;padding:14px;text-align:left;min-height:60px}
+.gh .t{font:600 1.45rem/1.1 var(--disp);letter-spacing:.01em}
+.grp.act .t{color:var(--act)} .grp.bon .t{color:var(--bon)} .grp.rea .t{color:var(--rea)}
+.gh .s{display:block;color:var(--mute);font-size:.88rem;margin-top:2px}
+.gh .chev{font-size:1.2rem;color:var(--mute);transition:transform .15s}
+.gh[aria-expanded=true] .chev{transform:rotate(180deg)}
+.gb{padding:0 10px 10px}
+.row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:8px;text-align:left;min-height:62px}
+.row:hover{border-color:var(--accent)}
+.row .rn{font-weight:600;display:block}
+.row small{display:block;color:var(--mute);font-size:.86rem;font-weight:400;margin-top:1px}
+.row .rv{font:700 1.9rem/1 var(--disp);white-space:nowrap}
+.row .rt{font-size:.82rem;color:var(--mute);white-space:nowrap;text-align:right}
+.row.std{background:transparent}
+.chip{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:.82rem;background:var(--panel2);margin:0 6px 6px 0}
+.chip.bonus{border-color:var(--bon)} .chip.reaction{border-color:var(--rea)} .chip.action{border-color:var(--act)}
+
+.list{display:flex;flex-direction:column}
+.lrow{display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:center;width:100%;background:transparent;border:0;border-top:1px solid var(--line);padding:10px 2px;text-align:left;min-height:48px}
+.lrow:first-child{border-top:0}
+.lrow .b{font:700 1.3rem/1 var(--disp)}
+.lrow .ab{color:var(--mute);font-size:.8rem;margin-left:6px}
+.dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--mute);display:inline-block}
+.dot.p1{background:var(--bon);border-color:var(--bon)}
+.dot.p2{background:var(--bon);border-color:var(--bon);box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--bon)}
+.abg{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.abt{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.abt .nm{font-weight:600}
+.abt .md{font:700 2rem/1 var(--disp)}
+.abt .sc{color:var(--mute);font-size:.85rem}
+.abt button{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:8px;min-height:44px;text-align:left;display:flex;align-items:center;gap:8px;justify-content:space-between}
+h2.sec{font:600 1.35rem/1.1 var(--disp);margin:6px 0 10px}
+.pre{white-space:pre-wrap;color:var(--mute);font-size:.92rem}
+details.f{border-top:1px solid var(--line);padding:10px 0}
+details.f:first-of-type{border-top:0}
+details.f summary{cursor:pointer;font-weight:600;min-height:32px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+details.f p{color:var(--mute);font-size:.92rem;margin-top:6px}
+details.f .opt{margin:8px 0 0 10px;padding-left:10px;border-left:3px solid var(--line)}
+
+/* sheet */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.ov[hidden]{display:none}
+.sheet{background:var(--panel);width:100%;max-width:620px;max-height:92%;overflow-y:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(24px + env(safe-area-inset-bottom,0px));border:1px solid var(--line);position:relative}
+@media (min-width:700px){.ov{align-items:center}.sheet{border-radius:18px;max-height:88%}}
+.sheet h2{font:700 1.8rem/1.1 var(--disp);padding-right:48px;margin-bottom:4px}
+.sheet h3{font:600 1.2rem/1.1 var(--disp);margin:16px 0 8px}
+.x{position:absolute;top:10px;right:10px;width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);font-size:1.3rem;line-height:1}
+.sheet p{margin-top:6px}
+.sheet .stepbox{border-top:1px solid var(--line);margin-top:14px;padding-top:2px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:6px 0 10px}
+.seg button{border:1px solid var(--line);background:var(--panel2);border-radius:9px;padding:10px 4px;min-height:44px;font-weight:600;font-size:.92rem}
+.seg button[aria-pressed=true]{border-color:var(--accent);box-shadow:inset 0 0 0 2px var(--accent)}
+.res{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.res .n{font:700 2.8rem/1 var(--disp)}
+.res .d{color:var(--mute);font-size:.92rem;flex:1 1 160px}
+.res em{display:block;font-style:normal;font-weight:600;color:var(--accent)}
+.res em.bad{color:var(--hp)}
+.two3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.two2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.note{background:color-mix(in srgb,var(--bon) 16%,transparent);border-left:4px solid var(--bon);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:.92rem}
+.check{display:flex;gap:10px;align-items:center;margin:8px 0;min-height:44px}
+.check input{width:22px;height:22px}
+.list-d li{margin:4px 0}
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;z-index:30;max-width:92%;text-align:center}
+.toast[hidden]{display:none}
+.imp{display:block;width:100%;text-align:center;cursor:pointer}
+.imp input{display:none}
+@media (prefers-reduced-motion:reduce){.bar i,.gh .chev{transition:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div><h1 id="who"></h1><p id="what"></p></div>
+    <button class="icon" id="menuBtn" aria-label="Menu and import">&#8943;</button>
+  </header>
+  <div class="layout">
+    <aside class="side" id="side" aria-label="Status"></aside>
+    <section>
+      <div class="tabs" role="tablist" id="tabs"></div>
+      <div id="view"></div>
+    </section>
+  </div>
+</div>
+<div class="ov" id="ov" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" id="sheet"><button class="x" data-a="close" aria-label="Close">&times;</button><div id="sb"></div></div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+/* ---------- D&D Beyond PDF field parser (pure, no DOM) ---------- */
+var DB_ABIL=['str','dex','con','int','wis','cha'];
+var DB_ABF={str:['STR','STRmod','ST Strength','StrProf'],dex:['DEX','DEXmod','ST Dexterity','DexProf'],con:['CON','CONmod','ST Constitution','ConProf'],int:['INT','INTmod','ST Intelligence','IntProf'],wis:['WIS','WISmod','ST Wisdom','WisProf'],cha:['CHA','CHamod','ST Charisma','ChaProf']};
+var DB_SKILLS=[['Acrobatics','Acrobatics','AcrobaticsProf','dex'],['Animal Handling','Animal','AnimalHandlingProf','wis'],['Arcana','Arcana','ArcanaProf','int'],['Athletics','Athletics','AthleticsProf','str'],['Deception','Deception','DeceptionProf','cha'],['History','History','HistoryProf','int'],['Insight','Insight','InsightProf','wis'],['Intimidation','Intimidation','IntimidationProf','cha'],['Investigation','Investigation','InvestigationProf','int'],['Medicine','Medicine','MedicineProf','wis'],['Nature','Nature','NatureProf','int'],['Perception','Perception','PerceptionProf','wis'],['Performance','Performance','PerformanceProf','cha'],['Persuasion','Persuasion','PersuasionProf','cha'],['Religion','Religion','ReligionProf','int'],['Sleight of Hand','SleightofHand','SleightOfHandProf','dex'],['Stealth','Stealth','StealthProf','dex'],['Survival','Survival','SurvivalProf','wis']];
+
+function dbKey(k){return String(k).replace(/\s+/g,' ').trim()}
+function dbMap(raw){
+  var m={};
+  Object.keys(raw).forEach(function(k){
+    var nk=dbKey(k),v=raw[k]==null?'':String(raw[k]);
+    if(!(nk in m)||(!m[nk]&&v))m[nk]=v;
+  });
+  return m;
+}
+function dbInt(v){
+  var n=parseInt(String(v==null?'':v).replace(/\u2212/g,'-').replace(/[^\d+-]/g,''),10);
+  return isNaN(n)?null:n;
+}
+function dbTokens(s){return String(s).toLowerCase().replace(/[^a-z0-9 ]+/g,' ').split(/\s+/).filter(Boolean)}
+function dbSubset(a,b){return a.length>0&&a.every(function(t){return b.indexOf(t)>-1})}
+function dbSlug(s){return String(s).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}
+function dbAct(s){
+  s=String(s||'').toLowerCase();
+  if(/bonus action/.test(s))return 'bonus';
+  if(/reaction/.test(s))return 'reaction';
+  if(/1 action|^action/.test(s))return 'action';
+  if(/special/.test(s))return 'special';
+  return '';
+}
+
+/* Parse the long "Features & Traits" text into structured features */
+function parseFeatureText(text){
+  var lines=String(text||'').split(/\r?\n/).map(function(s){return s.replace(/\s+$/,'')});
+  var feats=[],byName={},sub='';
+  var section='',cur=null,target=null,prevBlank=true,prevText=false;
+  function addText(t){
+    if(!target)return;
+    if(!target.paras)target.paras=[];
+    if(prevText&&!prevBlank&&target.paras.length)target.paras[target.paras.length-1]+=' '+t;
+    else target.paras.push(t);
+  }
+  lines.forEach(function(raw){
+    var line=raw.replace(/^\s+/,'');
+    var m;
+    if(!line){prevBlank=true;return}
+    if((m=line.match(/^===\s*(.+?)\s*===$/))){section=m[1];cur=null;target=null;prevBlank=true;prevText=false;return}
+    if((m=line.match(/^\*\s*(.+?)\s*(?:\u2022\s*(.*))?$/))){
+      var nm=m[1].replace(/^\d+:\s*/,'').trim();
+      var f=byName[nm.toLowerCase()];
+      if(!f){f={name:nm,source:(m[2]||'').trim(),section:section,paras:[],activation:'',uses:null,options:[],acts:[]};byName[nm.toLowerCase()]=f;feats.push(f)}
+      cur=f;target=f;prevBlank=false;prevText=false;return;
+    }
+    if(line.charAt(0)==='|'){
+      var body=line.replace(/^\|\s*/,'');
+      prevBlank=false;prevText=false;
+      /* usage: [Name:] N / Short|Long Rest [• activation] */
+      if((m=body.match(/^(?:([^:\u2022]+?):\s*)?(\d+)\s*\/\s*(Short|Long)(?:\s+or\s+(?:Short|Long))?\s+Rest\s*(?:\u2022\s*(.*))?$/i))&&cur){
+        cur.uses={max:parseInt(m[2],10),rest:m[3].toLowerCase(),name:(m[1]||cur.name).trim()};
+        if(m[4])cur.activation=dbAct(m[4])||cur.activation;
+        return;
+      }
+      /* option header: Name • */
+      if((m=body.match(/^(.+?)\s*\u2022\s*$/))&&cur){
+        var o={name:m[1].trim(),paras:[],activation:''};
+        cur.options.push(o);target=o;return;
+      }
+      /* activation tag: Something: 1 Action | 1 Bonus Action | 1 Reaction | (empty) */
+      if((m=body.match(/^(.+?):\s*(1 Action|1 Bonus Action|1 Reaction|Special|No Action)?\s*$/i))&&cur){
+        var tag=m[1].trim(),act=dbAct(m[2]);
+        var tt=dbTokens(tag.replace(/^Maneuver:\s*/i,'')),hit=null;
+        cur.options.forEach(function(o){if(!hit&&dbSubset(tt,dbTokens(o.name))&&dbSubset(dbTokens(o.name),tt))hit=o});
+        if(!hit)cur.options.forEach(function(o){if(!hit){var ot=dbTokens(o.name.replace(/\(.*\)/,''));if(dbSubset(ot,tt))hit=o}});
+        if(hit){if(act&&!hit.activation)hit.activation=act;return}
+        var parts=tag.split(/:\s*/),last=parts[parts.length-1];
+        var label=(last.toLowerCase()===cur.name.toLowerCase())?cur.name:tag;
+        if(act)cur.acts.push({label:label,activation:act});
+        return;
+      }
+      if(/^Special$/i.test(body)&&cur){cur.activation=cur.activation||'special';return}
+      if(cur&&/subclass/i.test(cur.name)&&!sub){sub=body.trim();return}
+      return;
+    }
+    addText(line);prevBlank=false;prevText=true;
+  });
+  feats.forEach(function(f){
+    f.text=f.paras.join('\n');
+    f.options.forEach(function(o){o.text=(o.paras||[]).join('\n')});
+  });
+  return {features:feats,sub:sub};
+}
+
+function parseDBFields(raw){
+  var m=dbMap(raw);
+  var cl=m['CLASS LEVEL']||'';
+  if(!cl&&!m['STR'])throw new Error('This does not look like a D&D Beyond character sheet PDF.');
+  var ch={v:1};
+  ch.name=m['CharacterName']||'Character';
+  ch.player=m['PLAYER NAME']||'';
+  ch.classText=cl;
+  var nums=(cl.match(/\d+/g)||[]).map(Number);
+  ch.level=nums.length?nums.reduce(function(a,b){return a+b},0):1;
+  ch.cls=cl.replace(/\s*\d+/g,'').replace(/\s*\/\s*/g,' / ').trim();
+  ch.species=m['RACE']||'';
+  ch.background=m['BACKGROUND']||'';
+  ch.alignment=m['ALIGNMENT']||'';
+  ch.profBonus=dbInt(m['ProfBonus']);
+  if(ch.profBonus==null)ch.profBonus=Math.ceil(ch.level/4)+1;
+  ch.abilities={};
+  DB_ABIL.forEach(function(k){
+    var f=DB_ABF[k],score=dbInt(m[f[0]]);if(score==null)score=10;
+    var mod=dbInt(m[f[1]]);if(mod==null)mod=Math.floor((score-10)/2);
+    var prof=!!(m[f[3]]||'').trim();
+    var sv=dbInt(m[f[2]]);if(sv==null)sv=mod+(prof?ch.profBonus:0);
+    ch.abilities[k]={score:score,mod:mod,save:sv,saveProf:prof};
+  });
+  ch.skills=DB_SKILLS.map(function(s){
+    var mod=ch.abilities[s[3]].mod,b=dbInt(m[s[1]]),p=(m[s[2]]||'').trim();
+    var prof=p?(/^e/i.test(p)?2:1):0;
+    if(b==null)b=mod+prof*ch.profBonus;
+    return {name:s[0],ab:s[3],bonus:b,prof:prof};
+  });
+  [1,2,3].forEach(function(i){
+    var n=(m['CustomSkill'+i]||'').trim();if(!n)return;
+    var b=dbInt(m['Custom Skill Bonus '+i]),p=(m['CustomProf'+i]||'').trim();
+    ch.skills.push({name:n,ab:'',bonus:b==null?0:b,prof:p?(/^e/i.test(p)?2:1):0});
+  });
+  ch.passive={perception:dbInt(m['Passive1']),insight:dbInt(m['Passive2']),investigation:dbInt(m['Passive3'])};
+  ch.ac=dbInt(m['AC'])||10;
+  ch.init=dbInt(m['Init'])||0;
+  ch.speed=(m['Speed']||'30 ft.').replace(/\s*\(Walking\)/i,'');
+  ch.hpMax=dbInt(m['MaxHP'])||1;
+  ch.hpCur=dbInt(m['CurrentHP']);
+  ch.hitDice=m['Total']||'';
+  ch.inspiration=!!(m['Inspiration']&&!/^(off|false|no|0)$/i.test(m['Inspiration']));
+  ch.proficiencies=(m['ProficienciesLang']||'').replace(/===\s*(.+?)\s*===/g,'$1:').replace(/[ \t]+\n/g,'\n').trim();
+  ch.defenses=(m['Defenses']||'').trim();
+  ch.senses=(m['AdditionalSenses']||'').trim();
+  ch.attacks=[];
+  for(var i=1;i<=8;i++){
+    var nm=m[i===1?'Wpn Name':'Wpn Name '+i];
+    if(!nm||!nm.trim())continue;
+    ch.attacks.push({
+      name:nm.trim(),
+      bonus:dbInt(m['Wpn'+i+' AtkBonus']),
+      dmg:(m['Wpn'+i+' Damage']||'').trim(),
+      notes:(m['Wpn Notes '+i]||'').trim()
+    });
+  }
+  var ft=[];
+  for(var n=1;n<=12;n++){var v=m['FeaturesTraits'+n];if(v==null)break;ft.push(v)}
+  var pf=parseFeatureText(ft.join('\n'));
+  ch.features=pf.features;
+  ch.sub=pf.sub;
+  return ch;
+}
+
+</script>
+<script>
+(function(){
+'use strict';
+var KEY='dnd-combat-sheet-v1';
+var DEFAULT_CHAR={"v":1,"name":"Darrow","player":"THEunholyLEMON","classText":"Fighter 5","level":5,"cls":"Fighter","species":"Human","background":"Custom Background","alignment":"Chaotic Good","profBonus":3,"abilities":{"str":{"score":16,"mod":3,"save":6,"saveProf":true},"dex":{"score":15,"mod":2,"save":2,"saveProf":false},"con":{"score":13,"mod":1,"save":4,"saveProf":true},"int":{"score":8,"mod":-1,"save":-1,"saveProf":false},"wis":{"score":13,"mod":1,"save":1,"saveProf":false},"cha":{"score":11,"mod":0,"save":0,"saveProf":false}},"skills":[{"name":"Acrobatics","ab":"dex","bonus":5,"prof":1},{"name":"Animal Handling","ab":"wis","bonus":1,"prof":0},{"name":"Arcana","ab":"int","bonus":-1,"prof":0},{"name":"Athletics","ab":"str","bonus":6,"prof":1},{"name":"Deception","ab":"cha","bonus":3,"prof":1},{"name":"History","ab":"int","bonus":-1,"prof":0},{"name":"Insight","ab":"wis","bonus":1,"prof":0},{"name":"Intimidation","ab":"cha","bonus":0,"prof":0},{"name":"Investigation","ab":"int","bonus":-1,"prof":0},{"name":"Medicine","ab":"wis","bonus":1,"prof":0},{"name":"Nature","ab":"int","bonus":-1,"prof":0},{"name":"Perception","ab":"wis","bonus":4,"prof":1},{"name":"Performance","ab":"cha","bonus":0,"prof":0},{"name":"Persuasion","ab":"cha","bonus":0,"prof":0},{"name":"Religion","ab":"int","bonus":-1,"prof":0},{"name":"Sleight of Hand","ab":"dex","bonus":2,"prof":0},{"name":"Stealth","ab":"dex","bonus":2,"prof":0},{"name":"Survival","ab":"wis","bonus":1,"prof":0}],"passive":{"perception":14,"insight":11,"investigation":9},"ac":15,"init":2,"speed":"30 ft.","hpMax":39,"hpCur":null,"hitDice":"5d10","inspiration":false,"proficiencies":"ARMOR:\nHeavy Armor, Light Armor, Medium Armor, Shields\n\nWEAPONS:\nMartial Weapons, Simple Weapons\n\nTOOLS:\nMason's Tools\n\nLANGUAGES:\nCommon, Elvish, Orc","defenses":"","senses":"","attacks":[{"name":"Crossbow, Light","bonus":5,"dmg":"1d8+2 Piercing","notes":"Simple, Ammunition, Loading, Range, Two-Handed, Slow, Range (80/320)"},{"name":"Darrow's Sling blade Silvered","bonus":6,"dmg":"1d8+5 Slashing","notes":"Martial, Silvered, Versatile, Sap, additional 1 d8 damage"},{"name":"Darrows Razor - Whip","bonus":6,"dmg":"1d4+5 Slashing","notes":"Martial, Finesse, Reach, Slow"},{"name":"Unarmed Strike","bonus":6,"dmg":"4 Bludgeoning","notes":""}],"features":[{"name":"Core Fighter Traits","source":"PHB-2024 91","section":"FIGHTER FEATURES","paras":[],"activation":"","uses":null,"options":[],"acts":[],"text":""},{"name":"Fighting Style","source":"PHB-2024 91","section":"FIGHTER FEATURES","paras":["You gain a Fighting Style feat of your choice, and whenever you gain a Fighter level, you can replace the feat you chose with a different Fighting Style feat."],"activation":"","uses":null,"options":[],"acts":[],"text":"You gain a Fighting Style feat of your choice, and whenever you gain a Fighter level, you can replace the feat you chose with a different Fighting Style feat."},{"name":"Second Wind","source":"PHB-2024 91","section":"FIGHTER FEATURES","paras":["As a Bonus Action, you can draw upon a limited well of physical and mental stamina and regain 1d10+5 HP.","You can use this 3 times per Long Rest, and can regain one expended use when you finish a Short Rest."],"activation":"bonus","uses":{"max":3,"rest":"long","name":"Second Wind"},"options":[],"acts":[],"text":"As a Bonus Action, you can draw upon a limited well of physical and mental stamina and regain 1d10+5 HP.\nYou can use this 3 times per Long Rest, and can regain one expended use when you finish a Short Rest."},{"name":"Weapon Mastery","source":"PHB-2024 91","section":"FIGHTER FEATURES","paras":[],"activation":"","uses":null,"options":[{"name":"Light Crossbow (Slow)","paras":["Slow. If you hit a creature with a Light Crossbow and deal damage to the creature, you can reduce its Speed by 10 ft. until the start of your next turn. If the creature is hit more than once with this property, the Speed reduction doesn’t exceed 10 ft."],"activation":"action","text":"Slow. If you hit a creature with a Light Crossbow and deal damage to the creature, you can reduce its Speed by 10 ft. until the start of your next turn. If the creature is hit more than once with this property, the Speed reduction doesn’t exceed 10 ft."},{"name":"Longsword (Sap)","paras":["Sap. If you hit a creature with a Longsword, that creature has Disadvantage on its next attack roll before the start of your next turn."],"activation":"action","text":"Sap. If you hit a creature with a Longsword, that creature has Disadvantage on its next attack roll before the start of your next turn."},{"name":"Whip (Slow)","paras":["Slow. If you hit a creature with a Whip and deal damage to the creature, you can reduce its Speed by 10 ft. until the start of your next turn. If the creature is hit more than once with this property, the Speed reduction doesn’t exceed 10 ft."],"activation":"","text":"Slow. If you hit a creature with a Whip and deal damage to the creature, you can reduce its Speed by 10 ft. until the start of your next turn. If the creature is hit more than once with this property, the Speed reduction doesn’t exceed 10 ft."},{"name":"Dagger (Nick)","paras":["Nick. When you make the extra attack of the Light property, you can make it as part of the Attack action instead of as a Bonus Action. This extra attack can only be made once per turn."],"activation":"action","text":"Nick. When you make the extra attack of the Light property, you can make it as part of the Attack action instead of as a Bonus Action. This extra attack can only be made once per turn."}],"acts":[],"text":""},{"name":"Action Surge","source":"PHB-2024 91","section":"FIGHTER FEATURES","paras":["On your turn you can take one additional action, except the Magic action.","You can use this feature 1 time(s) until you finish a Short or Long Rest."],"activation":"special","uses":{"max":1,"rest":"short","name":"Action Surge"},"options":[],"acts":[],"text":"On your turn you can take one additional action, except the Magic action.\nYou can use this feature 1 time(s) until you finish a Short or Long Rest."},{"name":"Tactical Mind","source":"PHB-2024 91","section":"FIGHTER FEATURES","paras":["When you fail an ability check, you can expend a use of Second Wind, and instead of regaining HP, you roll 1d10 and add the result to the ability check. If the check still fails, this use of Second Wind isn’t expended."],"activation":"special","uses":null,"options":[],"acts":[],"text":"When you fail an ability check, you can expend a use of Second Wind, and instead of regaining HP, you roll 1d10 and add the result to the ability check. If the check still fails, this use of Second Wind isn’t expended."},{"name":"Fighter Subclass","source":"PHB-2024 92","section":"FIGHTER FEATURES","paras":[],"activation":"","uses":null,"options":[],"acts":[],"text":""},{"name":"Combat Superiority","source":"PHB-2024 93","section":"FIGHTER FEATURES","paras":["You learn maneuvers that are fueled by special dice called Superiority Dice. Many maneuvers enhance an attack in some way. You can use only one maneuver per attack.","You have 4d8 Superiority Dice, which are expended when used. You regain any expended Superiority Die when you finish a Short or Long Rest."],"activation":"action","uses":{"max":4,"rest":"short","name":"Superiority Dice"},"options":[],"acts":[],"text":"You learn maneuvers that are fueled by special dice called Superiority Dice. Many maneuvers enhance an attack in some way. You can use only one maneuver per attack.\nYou have 4d8 Superiority Dice, which are expended when used. You regain any expended Superiority Die when you finish a Short or Long Rest."},{"name":"Student of War","source":"PHB-2024 94","section":"FIGHTER FEATURES","paras":["You gain proficiency with one type of Artisan’s Tools of your choice, and in one skill of your choice from the skills available to Fighters at level 1."],"activation":"","uses":null,"options":[],"acts":[],"text":"You gain proficiency with one type of Artisan’s Tools of your choice, and in one skill of your choice from the skills available to Fighters at level 1."},{"name":"Maneuver Options","source":"PHB-2024 94","section":"FIGHTER FEATURES","paras":["You know 3 maneuvers of your choice - many of which enhance an attack in some way. You can only use one maneuver per attack.","If a maneuver requires a saving throw, the DC equals 8 + Strength/Dexterity modifier (your choice) + Proficiency Bonus."],"activation":"","uses":null,"options":[{"name":"Feinting Attack","paras":["As a Bonus Action, you can expend one Superiority Die to feint, targeting one creature within 5 ft. of you. Your next attack roll against the target this turn has Advantage, and if it hits, you add the Superiority Die to the damage roll."],"activation":"bonus","text":"As a Bonus Action, you can expend one Superiority Die to feint, targeting one creature within 5 ft. of you. Your next attack roll against the target this turn has Advantage, and if it hits, you add the Superiority Die to the damage roll."},{"name":"Riposte","paras":["When a creature misses you with a melee attack roll, you can take a Reaction to expend one Superiority die to make a melee attack roll with a weapon or Unarmed Strike against that creature. If you hit, add the Superiority die to the attack’s damage."],"activation":"reaction","text":"When a creature misses you with a melee attack roll, you can take a Reaction to expend one Superiority die to make a melee attack roll with a weapon or Unarmed Strike against that creature. If you hit, add the Superiority die to the attack’s damage."},{"name":"Trip Attack","paras":["When you hit a creature with an attack using a weapon or Unarmed Strike, you can expend one Superiority Die and add the die to the attack’s damage roll. If the target is Large or smaller, it must succeed on a Str. saving throw or have the Prone condition."],"activation":"action","text":"When you hit a creature with an attack using a weapon or Unarmed Strike, you can expend one Superiority Die and add the die to the attack’s damage roll. If the target is Large or smaller, it must succeed on a Str. saving throw or have the Prone condition."}],"acts":[],"text":"You know 3 maneuvers of your choice - many of which enhance an attack in some way. You can only use one maneuver per attack.\nIf a maneuver requires a saving throw, the DC equals 8 + Strength/Dexterity modifier (your choice) + Proficiency Bonus."},{"name":"Ability Score Improvement","source":"PHB-2024 92","section":"FIGHTER FEATURES","paras":[],"activation":"","uses":null,"options":[],"acts":[],"text":""},{"name":"Extra Attack","source":"PHB-2024 92","section":"FIGHTER FEATURES","paras":["You can attack 2 times instead of once whenever you take the Attack action on your turn."],"activation":"","uses":null,"options":[],"acts":[],"text":"You can attack 2 times instead of once whenever you take the Attack action on your turn."},{"name":"Tactical Shift","source":"PHB-2024 92","section":"FIGHTER FEATURES","paras":["Whenever you activate your Second Wind with a Bonus Action, you can move up to 15 ft. without provoking Opportunity Attacks."],"activation":"","uses":null,"options":[],"acts":[{"label":"Tactical Shift","activation":"bonus"}],"text":"Whenever you activate your Second Wind with a Bonus Action, you can move up to 15 ft. without provoking Opportunity Attacks."},{"name":"Creature Type","source":"PHB-2024 194","section":"HUMAN SPECIES TRAITS","paras":["You're a Humanoid."],"activation":"","uses":null,"options":[],"acts":[],"text":"You're a Humanoid."},{"name":"Size","source":"PHB-2024 194","section":"HUMAN SPECIES TRAITS","paras":["Your Size is Medium or Small, chosen when you select this species."],"activation":"","uses":null,"options":[],"acts":[],"text":"Your Size is Medium or Small, chosen when you select this species."},{"name":"Speed","source":"PHB-2024 194","section":"HUMAN SPECIES TRAITS","paras":["Your Speed is 30 ft."],"activation":"","uses":null,"options":[],"acts":[],"text":"Your Speed is 30 ft."},{"name":"Resourceful","source":"PHB-2024 194","section":"HUMAN SPECIES TRAITS","paras":["You gain Heroic Inspiration whenever you finish a Long Rest."],"activation":"","uses":null,"options":[],"acts":[],"text":"You gain Heroic Inspiration whenever you finish a Long Rest."},{"name":"Skillful","source":"PHB-2024 193","section":"HUMAN SPECIES TRAITS","paras":["You gain proficiency in one skill of your choice."],"activation":"","uses":null,"options":[],"acts":[],"text":"You gain proficiency in one skill of your choice."},{"name":"Versatile","source":"PHB-2024 194","section":"HUMAN SPECIES TRAITS","paras":["You gain an Origin feat of your choice."],"activation":"","uses":null,"options":[],"acts":[],"text":"You gain an Origin feat of your choice."},{"name":"Ability Score Increases","source":"PHB-2024","section":"HUMAN SPECIES TRAITS","paras":["When determining your character’s ability scores, increase one score by 2 and a different one by 1, or increase three scores by 1."],"activation":"","uses":null,"options":[{"name":"Increase three scores (+1 / +1 / +1)","paras":["Increase three different scores by 1."],"activation":"","text":"Increase three different scores by 1."}],"acts":[],"text":"When determining your character’s ability scores, increase one score by 2 and a different one by 1, or increase three scores by 1."},{"name":"Dueling","source":"PHB-2024 209","section":"FEATS","paras":["While holding a Melee weapon in one hand and no other weapons, you gain a +2 bonus to damage rolls with that weapon."],"activation":"","uses":null,"options":[],"acts":[],"text":"While holding a Melee weapon in one hand and no other weapons, you gain a +2 bonus to damage rolls with that weapon."},{"name":"Sentinel","source":"PHB-2024 207","section":"FEATS","paras":["Ability Score Increase. Increase your Str. or Dex. by 1.","Guardian. Immediately after a creature within 5 ft. of you takes the Disengage action or hits a target other than you with an attack, you can make an Opportunity Attack against that creature.","Halt. When you hit a creature with an Opportunity Attack, the creature’s Speed becomes 0 for the rest of the current turn."],"activation":"","uses":null,"options":[],"acts":[{"label":"Sentinel: Guardian","activation":"reaction"}],"text":"Ability Score Increase. Increase your Str. or Dex. by 1.\nGuardian. Immediately after a creature within 5 ft. of you takes the Disengage action or hits a target other than you with an attack, you can make an Opportunity Attack against that creature.\nHalt. When you hit a creature with an Opportunity Attack, the creature’s Speed becomes 0 for the rest of the current turn."},{"name":"Savage Attacker","source":"PHB-2024 201","section":"FEATS","paras":["Once per turn when you hit a target with a weapon, you can roll the weapon’s damage dice twice and use either roll against the target."],"activation":"","uses":null,"options":[],"acts":[],"text":"Once per turn when you hit a target with a weapon, you can roll the weapon’s damage dice twice and use either roll against the target."}],"sub":"Battle Master"};
+var PDFJS='lib/pdf.min.js';
+var PDFJS_WORKER='lib/pdf.worker.min.js';
+
+var MASTERY={
+ Cleave:'On a hit, make another attack against a second creature within 5 ft of the first. Don\u2019t add your ability modifier to that damage. Once per turn.',
+ Graze:'On a miss, you still deal damage equal to your ability modifier.',
+ Nick:'The extra Light weapon attack is part of the Attack action. Once per turn.',
+ Push:'On a hit, push a Large or smaller target up to 10 ft straight away.',
+ Sap:'On a hit, the target has disadvantage on its next attack roll before the start of your next turn.',
+ Slow:'On a hit that deals damage, reduce the target\u2019s Speed by 10 ft until the start of your next turn (doesn\u2019t stack).',
+ Topple:'On a hit, the target makes a Con save or falls prone.',
+ Vex:'On a hit that deals damage, you have advantage on your next attack roll against that target before the end of your next turn.'
+};
+var STD=[
+ ['Dash','Gain extra movement equal to your Speed for this turn.'],
+ ['Disengage','Your movement doesn\u2019t provoke opportunity attacks for the rest of the turn.'],
+ ['Dodge','Until your next turn, attack rolls against you have disadvantage (if you can see the attacker) and you have advantage on Dex saves. It ends if you\u2019re incapacitated or your Speed is 0.'],
+ ['Help','Give an ally advantage on their next check for a task, or on their next attack against a creature within 5 ft of you.'],
+ ['Hide','Make a Dex (Stealth) check against DC 15 while out of sight or heavily obscured. On a success you\u2019re hidden.'],
+ ['Influence','Make a Cha (Deception, Intimidation, Performance, Persuasion) or Wis (Animal Handling) check to sway a creature.'],
+ ['Ready','Choose a trigger you can perceive and a response. When it happens, use your Reaction to do it.'],
+ ['Search','Make a Wis check (Insight, Medicine, Perception or Survival) to find something.'],
+ ['Study','Make an Int check (Arcana, History, Investigation, Nature or Religion) to recall or analyse.'],
+ ['Utilize','Use a non-magical object that needs an action.']
+];
+
+/* ---------- helpers ---------- */
+function $(s,r){return (r||document).querySelector(s)}
+function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function sgn(n){n=n||0;return (n<0?'\u2212':'+')+Math.abs(n)}
+function d(n){return Math.floor(Math.random()*n)+1}
+function rolls(n,s){var r=[];for(var i=0;i<n;i++)r.push(d(s));return r}
+function sum(a){return a.reduce(function(x,y){return x+y},0)}
+function paras(t){return String(t||'').split('\n').filter(Boolean).map(function(p){return '<p>'+esc(p)+'</p>'}).join('')}
+function clone(o){return JSON.parse(JSON.stringify(o))}
+function dmgParse(s){
+  var m=String(s||'').match(/^\s*(?:(\d+)\s*d\s*(\d+))?\s*(?:([+-])?\s*(\d+))?\s*(.*)$/i)||[];
+  var n=m[1]?+m[1]:0,dd=m[2]?+m[2]:0,mod=0;
+  if(m[4]){mod=+m[4];if(m[3]==='-')mod=-mod}
+  return {n:n,d:dd,mod:mod,type:(m[5]||'').trim().toLowerCase()};
+}
+function diceExpr(s){
+  var m=String(s).match(/(\d+)\s*d\s*(\d+)\s*(?:([+-])\s*(\d+))?/i);if(!m)return null;
+  var mod=m[4]?+m[4]:0;if(m[3]==='-')mod=-mod;
+  return {n:+m[1],d:+m[2],mod:mod};
+}
+
+/* ---------- model derived from imported features ---------- */
+function buildModel(ch){
+  var M={trackers:[],bonus:[],reaction:[],other:[],addons:[],perAction:1,savage:false,dieSize:0,sdId:null,maneuverDC:null,onlyOne:false,resourceful:false};
+  var all=ch.features.map(function(f){return f.text||''}).join('\n');
+  ch.features.forEach(function(f){
+    if(f.uses){
+      var id=dbSlug(f.uses.name);
+      M.trackers.push({id:id,name:f.uses.name,max:f.uses.max,rest:f.uses.rest,shortRegain:/regain one expended use when you finish a short rest/i.test(f.text)?1:0});
+    }
+    if(f.name==='Resourceful')M.resourceful=true;
+  });
+  var m;
+  if((m=all.match(/(\d+)d(\d+)\s+Superiority Dice/i)))M.dieSize=+m[2];
+  M.trackers.forEach(function(t){if(/superiority/i.test(t.name))M.sdId=t.id});
+  var ea=all.match(/attack (\d+) times/i);if(ea)M.perAction=Math.max(1,+ea[1]);
+  M.savage=/roll the weapon.{0,3}s damage dice twice/i.test(all);
+  M.onlyOne=/only use one maneuver per attack/i.test(all);
+  if(/DC equals 8 \+ Strength\/Dexterity modifier/i.test(all)){
+    M.maneuverDC=8+ch.profBonus+Math.max(ch.abilities.str.mod,ch.abilities.dex.mod);
+  }
+  function mk(f,name,act,text,opt){
+    var e={id:dbSlug((f.name||'')+'-'+name),name:name,activation:act,text:text,more:[],parent:f.name,trk:null,heal:null,usesDie:false,attackAfter:false,adv:false,melee:false,roll:null,mentions:[]};
+    if(f.uses&&!opt)e.trk=dbSlug(f.uses.name);
+    var hm=text.match(/regain\s+(\d+d\d+(?:\s*[+-]\s*\d+)?)\s*(?:hit points|HP)/i);if(hm)e.heal=hm[1].replace(/\s+/g,'');
+    if(/expend one Superiority Die/i.test(text)&&M.sdId){e.usesDie=true;if(/attack roll|attack/i.test(text)){e.attackAfter=true;e.melee=/melee attack/i.test(text);e.adv=/has Advantage/i.test(text)}}
+    var rm=text.match(/roll\s+(\d+d\d+)\s+and add/i);if(rm)e.roll=rm[1];
+    if(act==='reaction'&&/Opportunity Attack/i.test(text+' '+(f.text||'')))e.attackAfter=true,e.melee=true;
+    M.trackers.forEach(function(t){if(t.id!==e.trk&&!(e.usesDie&&t.id===M.sdId)&&new RegExp('\\b'+t.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(text))e.mentions.push(t.id)});
+    return e;
+  }
+  function paraFor(f,label){
+    var sub=label.indexOf(f.name+': ')===0?label.slice(f.name.length+2):'';
+    var ps=(f.paras||[]).slice(),main=null,more=[];
+    if(sub){
+      ps.forEach(function(p){if(!main&&p.toLowerCase().indexOf(sub.toLowerCase()+'.')===0)main=p.slice(sub.length+1).trim();else if(!/^Ability Score Increase/i.test(p))more.push(p)});
+    }
+    return {text:main||ps.join('\n'),more:main?more:[]};
+  }
+  function put(e){if(e.activation==='bonus')M.bonus.push(e);else if(e.activation==='reaction')M.reaction.push(e);else M.other.push(e)}
+  ch.features.forEach(function(f){
+    var ft=f.text||'';
+    f.acts.forEach(function(a){
+      var pf=paraFor(f,a.label),e=mk(f,a.label,a.activation,pf.text,false);e.more=pf.more;
+      if(a.label===f.name&&f.uses)e.trk=dbSlug(f.uses.name);
+      put(e);
+    });
+    if(!f.acts.length&&(f.activation==='bonus'||f.activation==='reaction'||f.activation==='special')){
+      put(mk(f,f.name,f.activation,ft,false));
+    }
+    f.options.forEach(function(o){
+      var isMan=/maneuver/i.test(f.name)||/Superiority Die/i.test(o.text||'');
+      if(o.activation==='bonus'||o.activation==='reaction'){put(mk(f,o.name,o.activation,o.text||'',true))}
+      else if(o.activation==='action'&&isMan&&M.dieSize){
+        var sv=(o.text||'').match(/\b(Str|Dex|Con|Int|Wis|Cha)\w*\.?\s+saving throw/i);
+        M.addons.push({id:dbSlug(o.name),name:o.name,text:o.text||'',save:sv?sv[1]:''});
+      }
+    });
+  });
+  return M;
+}
+function masteryOf(a){
+  return Object.keys(MASTERY).filter(function(w){return new RegExp('\\b'+w+'\\b','i').test(a.notes||'')});
+}
+
+/* ---------- state ---------- */
+var S,M;
+function freshPlay(ch,mm){
+  var t={};mm.trackers.forEach(function(x){t[x.id]=x.max});
+  return {hp:ch.hpCur==null?ch.hpMax:ch.hpCur,temp:0,trk:t,insp:!!ch.inspiration,death:{s:0,f:0},tab:'combat',open:'attack'};
+}
+function load(){
+  try{var r=window.localStorage.getItem(KEY);if(r){var o=JSON.parse(r);if(o&&o.char&&o.play)return o}}catch(e){}
+  var mm=buildModel(DEFAULT_CHAR);
+  return {char:clone(DEFAULT_CHAR),play:freshPlay(DEFAULT_CHAR,mm),imported:''};
+}
+function save(){try{window.localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+S=load();M=buildModel(S.char);
+S.play.trk=S.play.trk||{};
+
+function trk(id){for(var i=0;i<M.trackers.length;i++)if(M.trackers[i].id===id)return M.trackers[i];return null}
+function left(id){var v=S.play.trk[id];return v==null?0:v}
+function spend(id){if(left(id)<=0)return false;S.play.trk[id]=left(id)-1;save();return true}
+function toast(msg){var t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(function(){t.hidden=true},2400)}
+
+/* ---------- sheet plumbing ---------- */
+var SH=null,ADV=0,F=null,E=null,R=null,SUM=null;
+function openSheet(type){SH=type;$('#ov').hidden=false;renderSheet();$('#sheet').scrollTop=0}
+function closeSheet(){SH=null;$('#ov').hidden=true;render()}
+function renderSheet(){
+  var h='';
+  if(SH==='attack')h=attackSheet();
+  else if(SH==='entry')h=entrySheet();
+  else if(SH==='roll')h=rollSheet();
+  else if(SH==='std')h=stdSheet();
+  else if(SH==='menu')h=menuSheet();
+  else if(SH==='summary')h=summarySheet();
+  $('#sb').innerHTML=h;
+  render();
+}
+function advSeg(){
+  return '<div class="seg" role="group" aria-label="Advantage">'
+   +[[-1,'Disadvantage'],[0,'Normal'],[1,'Advantage']].map(function(o){return '<button data-a="adv" data-v="'+o[0]+'" aria-pressed="'+(ADV===o[0])+'">'+o[1]+'</button>'}).join('')+'</div>';
+}
+function d20(){
+  var a=d(20),b=ADV?d(20):null,used=a;
+  if(ADV===1&&b>a)used=b;
+  if(ADV===-1&&b<a)used=b;
+  return {a:a,b:b,used:used,adv:ADV};
+}
+function d20Text(r,bonus){
+  var t='d20 '+r.used+' '+(bonus<0?'\u2212 ':'+ ')+Math.abs(bonus);
+  if(r.b!=null)t+=' (rolled '+r.a+' and '+r.b+', '+(r.adv===1?'kept higher':'kept lower')+')';
+  return t;
+}
+
+/* ---------- attack flow ---------- */
+function openAttack(i,ctx){
+  ctx=ctx||{};
+  var prev=F&&SH==='attack'?F:null;
+  F={ai:i,n:ctx.keepN&&prev?prev.n:1,roll:null,out:null,dmg:null,add:null,pre:ctx.pre||null,notes:ctx.notes||[],savage:M.savage};
+  ADV=ctx.adv!=null?ctx.adv:0;
+  openSheet('attack');
+}
+function dmgTotal(){
+  if(!F.dmg)return null;
+  var t=F.dmg.sum+F.dmg.p.mod;
+  if(F.add)t+=F.add.value;
+  if(F.pre)t+=F.pre.value;
+  return t;
+}
+function rollDamage(){
+  var a=S.char.attacks[F.ai],p=dmgParse(a.dmg),crit=F.out==='crit';
+  var nd=p.n*(crit?2:1),r1=p.d?rolls(nd,p.d):[],r2=null,use=r1;
+  if(F.savage&&p.d){r2=rolls(nd,p.d);if(sum(r2)>sum(r1))use=r2}
+  F.dmg={p:p,a:r1,b:r2,used:use,sum:sum(use),crit:crit};
+}
+function attackSheet(){
+  var a=S.char.attacks[F.ai],mast=masteryOf(a);
+  var h='<h2>'+esc(a.name)+'</h2><p class="muted">'+(M.perAction>1?'Attack '+F.n+' of '+M.perAction+' \u00b7 ':'')+sgn(a.bonus)+' to hit \u00b7 '+esc(a.dmg)+'</p>';
+  if(F.pre)h+='<div class="note">'+esc(F.pre.name)+': add '+F.pre.value+' to the damage if this hits.</div>';
+  F.notes.forEach(function(n){h+='<div class="note">'+esc(n)+'</div>'});
+  h+='<div class="stepbox"><h3>1. Roll to hit</h3>'+advSeg()+'<button class="btn pri big" data-a="fl-roll">Roll d20 '+sgn(a.bonus)+'</button>';
+  if(F.roll){
+    var tot=F.roll.used+a.bonus,nat=F.roll.used;
+    h+='<div class="res"><span class="n">'+tot+'</span><span class="d">'+esc(d20Text(F.roll,a.bonus))+(nat===20?'<em>Natural 20: critical hit</em>':nat===1?'<em class="bad">Natural 1: miss</em>':'')+'</span></div>';
+  }
+  h+='<div class="two3">'
+   +['hit:It hits','crit:Critical hit','miss:It misses'].map(function(o){var k=o.split(':');return '<button class="btn'+(F.out===k[0]?' sel':'')+'" data-a="fl-out" data-v="'+k[0]+'">'+k[1]+'</button>'}).join('')+'</div></div>';
+  if(F.out==='miss'){
+    h+='<div class="stepbox"><h3>Missed</h3><p class="muted">No damage.</p>';
+    if(mast.indexOf('Graze')>-1)h+='<div class="note"><b>Graze:</b> '+esc(MASTERY.Graze)+'</div>';
+    h+='</div>';
+  }
+  if(F.out==='hit'||F.out==='crit'){
+    h+='<div class="stepbox"><h3>2. Damage</h3><p class="muted">'+esc(a.dmg)+(F.out==='crit'?' \u00b7 dice doubled for the critical hit':'')+'</p>';
+    if(M.savage&&dmgParse(a.dmg).d)h+='<label class="check"><input type="checkbox" data-a="fl-savage"'+(F.savage?' checked':'')+'> Savage Attacker: roll twice, keep the higher (once per turn)</label>';
+    h+='<button class="btn pri big" data-a="fl-dmg">'+(F.dmg?'Roll damage again':'Roll damage')+'</button>';
+    if(F.dmg){
+      var parts=[];
+      parts.push('d'+(F.dmg.p.d||'')+' ('+F.dmg.used.join(', ')+')'+(F.dmg.b?' of '+F.dmg.a.join(', ')+' / '+F.dmg.b.join(', '):''));
+      if(F.dmg.p.mod)parts.push(sgn(F.dmg.p.mod));
+      if(F.pre)parts.push(esc(F.pre.name)+' '+F.pre.value);
+      if(F.add)parts.push(esc(F.add.name)+' die '+F.add.value);
+      if(!F.dmg.p.d)parts=[String(F.dmg.p.mod)].concat(F.add?[esc(F.add.name)+' die '+F.add.value]:[]);
+      h+='<div class="res"><span class="n">'+dmgTotal()+'</span><span class="d">'+parts.join(' ')+'<em>'+esc(F.dmg.p.type||'damage')+'</em></span></div>';
+    }
+    if(mast.length){
+      h+='<div class="stepbox"><h3>On a hit</h3>';
+      mast.forEach(function(w){if(w!=='Graze')h+='<div class="note"><b>'+w+':</b> '+esc(MASTERY[w])+'</div>'});
+      h+='</div>';
+    }
+    if(M.addons.length){
+      h+='<div class="stepbox"><h3>3. Add a maneuver (optional)</h3><p class="muted">'+left(M.sdId)+' superiority dice left (d'+M.dieSize+')</p>';
+      M.addons.forEach(function(o){
+        var dis=(F.add&&(M.onlyOne||F.add.id===o.id))||left(M.sdId)<=0;
+        h+='<button class="btn big" style="margin-top:8px" data-a="fl-add" data-id="'+o.id+'"'+(dis?' disabled':'')+'>'+esc(o.name)+' \u00b7 spend a d'+M.dieSize+'</button>';
+      });
+      if(F.add){
+        h+='<div class="res"><span class="n">+'+F.add.value+'</span><span class="d"><b>'+esc(F.add.name)+'</b><br>'+esc(F.add.text)+(F.add.save&&M.maneuverDC?'<em>'+esc(F.add.save)+' save, DC '+M.maneuverDC+'</em>':'')+'</span></div>'
+         +'<button class="btn" data-a="fl-unadd">Undo and refund the die</button>';
+      }
+      h+='</div>';
+    }
+  }
+  if(F.out){
+    h+='<div class="stepbox" style="padding-top:12px">'
+     +(F.n<M.perAction?'<button class="btn pri big" data-a="fl-next">Next attack ('+(F.n+1)+' of '+M.perAction+')</button>':'<button class="btn big" data-a="close">Done</button>')+'</div>';
+  }
+  return h;
+}
+
+/* ---------- entry (bonus / reaction / other) ---------- */
+function openEntry(id){
+  var all=M.bonus.concat(M.reaction,M.other),e=null;
+  all.forEach(function(x){if(x.id===id)e=x});
+  if(!e)return;
+  E={e:e,spent:false,heal:null,applied:false,die:null,roll:null};
+  ADV=0;openSheet('entry');
+}
+function weaponList(e,pre){
+  var h='';
+  S.char.attacks.forEach(function(a,i){
+    if(e.melee&&/Ammunition/i.test(a.notes||''))return;
+    h+='<button class="row" data-a="ent-atk" data-i="'+i+'"><span class="rn">'+esc(a.name)+'<small>'+esc(a.dmg)+'</small></span><span class="rv">'+sgn(a.bonus)+'</span></button>';
+  });
+  return h;
+}
+function entrySheet(){
+  var e=E.e,t=e.trk?trk(e.trk):null,dieT=M.sdId?trk(M.sdId):null;
+  var actLabel={bonus:'Bonus action',reaction:'Reaction',special:'Special',action:'Action'}[e.activation]||'';
+  var h='<h2>'+esc(e.name)+'</h2><p>'+(actLabel?'<span class="chip '+e.activation+'">'+actLabel+'</span>':'')
+   +(t?'<span class="chip">'+esc(t.name)+': '+left(t.id)+' of '+t.max+' left</span>':'')
+   +(e.usesDie&&dieT?'<span class="chip">Superiority dice: '+left(dieT.id)+' of '+dieT.max+' left</span>':'')+'</p>';
+  h+=paras(e.text);
+  if(e.more.length)h+='<details class="f"><summary>Also from this feat</summary>'+e.more.map(function(p){return '<p>'+esc(p)+'</p>'}).join('')+'</details>';
+  h+='<div class="stepbox"><h3>Steps</h3>';
+  if(e.heal){
+    if(!E.heal){
+      h+='<button class="btn pri big" data-a="ent-heal"'+(t&&left(t.id)<=0?' disabled':'')+'>Use '+esc(e.name)+' and roll '+esc(e.heal)+'</button>';
+      if(t&&left(t.id)<=0)h+='<p class="muted">No uses left.</p>';
+    }else{
+      h+='<div class="res"><span class="n">+'+E.heal.total+'</span><span class="d">'+esc(e.heal)+' rolled '+E.heal.rolls.join(', ')+(E.heal.mod?' '+sgn(E.heal.mod):'')+'<em>HP to regain</em></span></div>'
+       +'<button class="btn pri big" data-a="ent-apply"'+(E.applied?' disabled':'')+'>'+(E.applied?'Healing applied':'Apply '+E.heal.total+' HP')+'</button>';
+    }
+  }else if(e.usesDie){
+    if(E.die==null){
+      h+='<button class="btn pri big" data-a="ent-die"'+(left(M.sdId)<=0?' disabled':'')+'>Spend a superiority die (d'+M.dieSize+')</button>';
+      if(left(M.sdId)<=0)h+='<p class="muted">No superiority dice left.</p>';
+    }else{
+      h+='<div class="res"><span class="n">'+E.die+'</span><span class="d">Superiority die rolled<em>Add it to the damage if the attack hits</em></span></div>';
+      if(e.attackAfter)h+='<h3>Now attack</h3>'+(e.adv?'<p class="muted">This attack has advantage.</p>':'')+weaponList(e);
+    }
+  }else if(e.roll){
+    h+='<button class="btn pri big" data-a="ent-roll">Roll '+esc(e.roll)+'</button>';
+    if(E.roll)h+='<div class="res"><span class="n">'+E.roll.total+'</span><span class="d">'+esc(e.roll)+' rolled '+E.roll.rolls.join(', ')+'<em>Add it to your check</em></span></div>';
+  }else if(e.trk&&t){
+    if(!E.spent)h+='<button class="btn pri big" data-a="ent-use"'+(left(t.id)<=0?' disabled':'')+'>Use '+esc(e.name)+'</button>'+(left(t.id)<=0?'<p class="muted">No uses left.</p>':'');
+    else h+='<div class="note">Used. '+left(t.id)+' left.</div>'+(/additional action|extra action/i.test(e.text)?'<h3>Attack with</h3>'+weaponList({melee:false}):'');
+  }else if(e.attackAfter){
+    h+='<p class="muted">Make one melee attack against the creature.</p>'+weaponList(e);
+  }else{
+    h+='<p class="muted">Nothing to roll. Follow the description above.</p>';
+  }
+  e.mentions.forEach(function(id){
+    var x=trk(id);
+    h+='<button class="btn big" style="margin-top:8px" data-a="spend" data-id="'+id+'"'+(left(id)<=0?' disabled':'')+'>Spend 1 '+esc(x.name)+' ('+left(id)+' left)</button>';
+  });
+  return h+'</div>';
+}
+
+/* ---------- roll sheet and standard action sheet ---------- */
+function openRoll(title,bonus){R={title:title,bonus:bonus,res:null};ADV=0;openSheet('roll')}
+function rollSheet(){
+  var h='<h2>'+esc(R.title)+'</h2><p class="muted">d20 '+sgn(R.bonus)+'</p>'+advSeg()+'<button class="btn pri big" data-a="r-roll">Roll d20 '+sgn(R.bonus)+'</button>';
+  if(R.res)h+='<div class="res"><span class="n">'+(R.res.used+R.bonus)+'</span><span class="d">'+esc(d20Text(R.res,R.bonus))+(R.res.used===20?'<em>Natural 20</em>':R.res.used===1?'<em class="bad">Natural 1</em>':'')+'</span></div>';
+  return h;
+}
+function stdSheet(){
+  var s=SUM;
+  return '<h2>'+esc(s.name)+'</h2>'+paras(s.text)+(s.roll?'<button class="btn pri big" style="margin-top:12px" data-a="std-roll">Roll '+esc(s.roll[0])+' '+sgn(s.roll[1])+'</button>':'');
+}
+function grappleDC(){return 8+S.char.abilities.str.mod+S.char.profBonus}
+
+/* ---------- menu / import ---------- */
+function menuSheet(){
+  return '<h2>Import and settings</h2>'
+   +'<p class="muted">Leveled up? Export your character as a PDF from D&amp;D Beyond, then import it here. Your current HP and used resources are kept, and you\u2019ll see what changed.</p>'
+   +'<label class="btn pri big imp" style="margin-top:14px;display:flex;align-items:center;justify-content:center">Choose D&amp;D Beyond PDF<input type="file" id="pdfIn" accept="application/pdf,.pdf"></label>'
+   +'<p id="impMsg" class="muted" style="margin-top:10px"></p>'
+   +'<p class="muted">'+(S.imported?'Last import: '+esc(S.imported)+'. ':'')+'Your sheet is saved in this browser only.</p>'
+   +'<h3>Reset</h3><p class="muted">Go back to the built-in Darrow sheet and clear all tracking.</p>'
+   +'<button class="btn dmg big" data-a="reset" style="margin-top:8px">Reset to Darrow</button>';
+}
+function summarySheet(){
+  var h='<h2>Imported '+esc(SUM.name)+'</h2><p class="muted">'+esc(SUM.line)+'</p>';
+  if(SUM.changes.length)h+='<h3>What changed</h3><ul class="list-d">'+SUM.changes.map(function(c){return '<li>'+esc(c)+'</li>'}).join('')+'</ul>';
+  else h+='<p>Nothing changed from your last import.</p>';
+  return h+'<button class="btn pri big" data-a="close" style="margin-top:14px">Back to combat</button>';
+}
+function loadScript(src){
+  return new Promise(function(res,rej){
+    var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=function(){rej(new Error('Could not load the PDF reader. Check your connection and try again.'))};
+    document.head.appendChild(s);
+  });
+}
+function loadPdfJs(){
+  if(window.pdfjsLib&&window.pdfjsWorker)return Promise.resolve();
+  return loadScript(PDFJS).then(function(){return loadScript(PDFJS_WORKER)}).then(function(){
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS_WORKER;
+  });
+}
+function importFile(file){
+  var msg=function(t){var el=$('#impMsg');if(el)el.textContent=t};
+  msg('Reading the PDF\u2026');
+  loadPdfJs().then(function(){return file.arrayBuffer()}).then(function(buf){
+    return window.pdfjsLib.getDocument({data:new Uint8Array(buf),isEvalSupported:false,useWorkerFetch:false,disableFontFace:true}).promise;
+  }).then(function(doc){
+    var raw={},chain=Promise.resolve();
+    for(var p=1;p<=doc.numPages;p++){(function(n){
+      chain=chain.then(function(){return doc.getPage(n)}).then(function(pg){return pg.getAnnotations()}).then(function(an){
+        an.forEach(function(a){
+          if(a.subtype==='Widget'&&a.fieldName){
+            var v=a.fieldValue;if(Array.isArray(v))v=v.join('\n');
+            if(!(a.fieldName in raw)||(!raw[a.fieldName]&&v))raw[a.fieldName]=v==null?'':v;
+          }
+        });
+      });
+    })(p)}
+    return chain.then(function(){return raw});
+  }).then(function(raw){
+    var ch=parseDBFields(raw);
+    if(!ch.attacks.length&&!ch.features.length)throw new Error('I couldn\u2019t find any attacks or features in that PDF. Is it the D&D Beyond character sheet export?');
+    applyImport(ch);
+  }).catch(function(err){
+    msg(err&&err.message?err.message:'Something went wrong reading that PDF.');
+  });
+}
+function applyImport(ch){
+  var old=S.char,oldM=M,newM=buildModel(ch),ch2=[];
+  if(old.level!==ch.level)ch2.push('Level '+old.level+' to '+ch.level+(ch.cls?' ('+ch.cls+')':''));
+  if(old.hpMax!==ch.hpMax)ch2.push('Max HP '+old.hpMax+' to '+ch.hpMax);
+  if(old.ac!==ch.ac)ch2.push('Armour class '+old.ac+' to '+ch.ac);
+  if(old.profBonus!==ch.profBonus)ch2.push('Proficiency bonus '+sgn(old.profBonus)+' to '+sgn(ch.profBonus));
+  DB_ABIL.forEach(function(k){if(old.abilities[k].score!==ch.abilities[k].score)ch2.push(k.toUpperCase()+' '+old.abilities[k].score+' to '+ch.abilities[k].score)});
+  var on=old.features.map(function(f){return f.name.toLowerCase()});
+  var nn=ch.features.map(function(f){return f.name.toLowerCase()});
+  function opts(c){var r=[];c.features.forEach(function(f){f.options.forEach(function(o){r.push(o.name.toLowerCase())})});return r}
+  var oo=opts(old),no=opts(ch);
+  ch.features.forEach(function(f){if(on.indexOf(f.name.toLowerCase())<0)ch2.push('New feature: '+f.name)});
+  ch.features.forEach(function(f){f.options.forEach(function(o){if(oo.indexOf(o.name.toLowerCase())<0&&on.indexOf(f.name.toLowerCase())>-1)ch2.push('New option: '+o.name)})});
+  old.features.forEach(function(f){if(nn.indexOf(f.name.toLowerCase())<0)ch2.push('Removed: '+f.name)});
+  var oa=old.attacks.map(function(a){return a.name}),na=ch.attacks.map(function(a){return a.name});
+  na.forEach(function(n){if(oa.indexOf(n)<0)ch2.push('New attack: '+n)});
+  oa.forEach(function(n){if(na.indexOf(n)<0)ch2.push('Attack removed: '+n)});
+  /* keep play state */
+  var p=S.play;
+  if(ch.hpMax>old.hpMax)p.hp=p.hp+(ch.hpMax-old.hpMax);
+  p.hp=Math.max(0,Math.min(p.hp,ch.hpMax));
+  var t={};
+  newM.trackers.forEach(function(x){
+    var prev=oldM.trackers.filter(function(y){return y.id===x.id})[0];
+    if(prev){var cur=p.trk[x.id];if(cur==null)cur=x.max;if(x.max>prev.max)cur+=x.max-prev.max;t[x.id]=Math.min(cur,x.max)}
+    else t[x.id]=x.max;
+  });
+  p.trk=t;
+  S.char=ch;M=newM;S.imported=new Date().toLocaleDateString('en-GB');
+  save();
+  SUM={name:ch.name,line:(ch.cls?ch.cls+' '+ch.level:'Level '+ch.level)+(ch.sub?' \u00b7 '+ch.sub:''),changes:ch2};
+  openSheet('summary');
+}
+
+/* ---------- main render ---------- */
+function bar(){return Math.max(0,Math.min(100,S.char.hpMax?S.play.hp/S.char.hpMax*100:0))}
+function renderSide(){
+  var ch=S.char,p=S.play,amt=$('#hpamt'),keep=amt?amt.value:'';
+  var h='<div class="card"><span class="muted">Hit points</span><div class="hpbig"><b>'+p.hp+'</b><span class="of">/ '+ch.hpMax+'</span>'+(p.temp?'<span class="tmpv">Temp '+p.temp+'</span>':'')+'</div>'
+   +'<div class="bar"><i style="width:'+bar()+'%"></i></div>'
+   +'<div class="hpctl"><input type="number" id="hpamt" inputmode="numeric" min="0" placeholder="Amount" aria-label="Amount of damage or healing"><button class="btn dmg" data-a="dmg">Damage</button><button class="btn pri" data-a="heal">Heal</button></div>';
+  if(p.hp<=0){
+    h+='<div class="death"><span><b>Down.</b> Death saves</span>';
+    ['s','f'].forEach(function(k){
+      h+='<span>'+(k==='s'?'Pass':'Fail')+' ';
+      for(var i=0;i<3;i++)h+='<button class="pip '+k+(i<p.death[k]?' on':'')+'" data-a="death" data-k="'+k+'" data-i="'+i+'" aria-label="'+(k==='s'?'Success':'Failure')+' '+(i+1)+'"></button> ';
+      h+='</span>';
+    });
+    h+='</div>';
+  }
+  h+='</div>';
+  h+='<div class="tiles"><div class="tile"><span class="lbl">Armour class</span><span class="v">'+ch.ac+'</span></div>'
+   +'<button class="tile" data-a="init"><span class="lbl">Initiative</span><span class="v">'+sgn(ch.init)+'</span></button>'
+   +'<div class="tile"><span class="lbl">Speed</span><span class="v">'+esc(ch.speed.replace(/\s*ft\.?/,'')||'30')+' ft</span></div></div>';
+  if(M.trackers.length){
+    h+='<div class="trks">';
+    M.trackers.forEach(function(t){
+      h+='<div class="trk"><span class="lbl">'+esc(t.name)+(t.id===M.sdId&&M.dieSize?' (d'+M.dieSize+')':'')+'</span><div class="tv"><b>'+left(t.id)+'</b><span class="of">/ '+t.max+'</span></div><div class="tb"><button class="step-b" data-a="tm" data-id="'+t.id+'" aria-label="Use one '+esc(t.name)+'">\u2212</button><button class="step-b" data-a="tp" data-id="'+t.id+'" aria-label="Regain one '+esc(t.name)+'">+</button></div></div>';
+    });
+    h+='</div>';
+  }
+  h+='<div class="rests"><button class="insp" data-a="insp" aria-pressed="'+!!p.insp+'" title="Heroic inspiration">Inspiration</button><button class="btn" data-a="short">Short rest</button><button class="btn pri" data-a="long">Long rest</button></div>';
+  $('#side').innerHTML=h;
+  if(keep)$('#hpamt').value=keep;
+}
+function firstSentence(t,n){
+  t=String(t||'').replace(/\s+/g,' ').trim();
+  var m=t.match(/^.*?[.!?](\s|$)/),s=m?m[0].trim():t;
+  return s.length>n?s.slice(0,n-1).trim()+'\u2026':s;
+}
+function entryRow(e){
+  var t=e.trk?trk(e.trk):null,sub=firstSentence(e.text,80);
+  var right=t?left(t.id)+' left':(e.usesDie&&M.sdId?left(M.sdId)+' dice':'');
+  return '<button class="row" data-a="ent" data-id="'+esc(e.id)+'"><span class="rn">'+esc(e.name)+(sub?'<small>'+esc(sub)+'</small>':'')+'</span><span class="rt">'+esc(right)+'</span></button>';
+}
+function grp(key,cls,title,sub,body){
+  var open=S.play.open===key;
+  return '<section class="grp '+cls+'"><button class="gh" data-a="grp" data-v="'+key+'" aria-expanded="'+open+'"><span><span class="t">'+title+'</span><span class="s">'+esc(sub)+'</span></span><span class="chev">\u25be</span></button>'+(open?'<div class="gb">'+body+'</div>':'')+'</section>';
+}
+function renderCombat(){
+  var ch=S.char,h='';
+  var atk='';
+  ch.attacks.forEach(function(a,i){
+    var ms=masteryOf(a),sub=a.dmg+(ms.length?' \u00b7 '+ms.join(', '):'');
+    atk+='<button class="row" data-a="atk" data-i="'+i+'"><span class="rn">'+esc(a.name)+'<small>'+esc(sub)+'</small></span><span class="rv">'+sgn(a.bonus)+'</span></button>';
+  });
+  h+=grp('attack','act','Attack',M.perAction>1?'Attack action \u00b7 '+M.perAction+' attacks':'Attack action',atk||'<p class="muted">No attacks found. Import your PDF.</p>');
+  h+=grp('bonus','bon','Bonus action',M.bonus.length+' options',M.bonus.map(entryRow).join('')||'<p class="muted">None.</p>');
+  var opp={id:'opp',name:'Opportunity attack',activation:'reaction',text:'When a creature you can see leaves your reach, use your Reaction to make one melee attack against it. Teleporting or being moved doesn\u2019t provoke it.',more:[],trk:null,heal:null,usesDie:false,attackAfter:true,adv:false,melee:true,roll:null,mentions:[]};
+  M.oppEntry=opp;
+  h+=grp('reaction','rea','Reaction',(M.reaction.length+1)+' options',M.reaction.map(entryRow).join('')+entryRow(opp));
+  var oth=M.other.map(entryRow).join('');
+  oth+='<button class="row" data-a="std" data-n="Grapple or shove"><span class="rn">Grapple or shove<small>Replaces one attack \u00b7 DC '+grappleDC()+'</small></span></button>';
+  STD.forEach(function(s,i){oth+='<button class="row std" data-a="std" data-i="'+i+'"><span class="rn">'+esc(s[0])+'<small>'+esc(firstSentence(s[1],70))+'</small></span></button>'});
+  h+=grp('other','','Other actions','Action Surge, standard actions',oth);
+  $('#view').innerHTML=h;
+}
+function renderStats(){
+  var ch=S.char,h='<div class="card"><h2 class="sec">Abilities</h2><div class="abg">';
+  DB_ABIL.forEach(function(k){
+    var a=ch.abilities[k];
+    h+='<div class="abt"><span class="nm">'+({str:'Strength',dex:'Dexterity',con:'Constitution',int:'Intelligence',wis:'Wisdom',cha:'Charisma'}[k])+'</span><button data-a="chk" data-t="'+k+'" data-k="ab"><span class="md">'+sgn(a.mod)+'</span><span class="sc">'+a.score+'</span></button>'
+     +'<button data-a="chk" data-t="'+k+'" data-k="save"><span><span class="dot'+(a.saveProf?' p1':'')+'"></span> Save</span><b>'+sgn(a.save)+'</b></button></div>';
+  });
+  h+='</div></div><div class="card" style="margin-top:12px"><h2 class="sec">Skills</h2><p class="muted" style="margin-bottom:6px">Tap any skill to roll it.</p><div class="list">';
+  ch.skills.forEach(function(s,i){
+    h+='<button class="lrow" data-a="chk" data-k="skill" data-i="'+i+'"><span class="dot'+(s.prof?' p'+s.prof:'')+'"></span><span>'+esc(s.name)+(s.ab?'<span class="ab">'+s.ab.toUpperCase()+'</span>':'')+'</span><span class="b">'+sgn(s.bonus)+'</span></button>';
+  });
+  h+='</div><p class="muted" style="margin-top:10px">Passive perception '+(ch.passive.perception==null?'':ch.passive.perception)+' \u00b7 insight '+(ch.passive.insight==null?'':ch.passive.insight)+' \u00b7 investigation '+(ch.passive.investigation==null?'':ch.passive.investigation)+'</p></div>';
+  if(ch.proficiencies)h+='<div class="card" style="margin-top:12px"><h2 class="sec">Proficiencies</h2><p class="pre">'+esc(ch.proficiencies)+'</p></div>';
+  $('#view').innerHTML=h;
+}
+function renderFeatures(){
+  var ch=S.char,h='<div class="card">',sec='';
+  ch.features.forEach(function(f){
+    if(f.section!==sec){sec=f.section;h+='<h2 class="sec" style="margin-top:14px">'+esc(sec.toLowerCase().replace(/\b\w/g,function(c){return c.toUpperCase()}))+'</h2>'}
+    var tag=(f.uses?'<span class="chip">'+f.uses.max+' per '+f.uses.rest+' rest</span>':'')+(f.activation&&f.activation!=='special'&&f.activation!=='action'?'<span class="chip '+f.activation+'">'+({bonus:'Bonus action',reaction:'Reaction'}[f.activation])+'</span>':'');
+    h+='<details class="f"><summary>'+esc(f.name)+tag+'</summary>'+(f.text?paras(f.text):'<p>See the options below or your D&amp;D Beyond sheet.</p>');
+    f.options.forEach(function(o){h+='<div class="opt"><b>'+esc(o.name)+'</b>'+paras(o.text)+'</div>'});
+    h+='</details>';
+  });
+  $('#view').innerHTML=h+'</div>';
+}
+function render(){
+  var ch=S.char;
+  $('#who').textContent=ch.name;
+  $('#what').textContent=[ch.cls?ch.cls+' '+ch.level:'Level '+ch.level,ch.sub,ch.species].filter(Boolean).join(' \u00b7 ');
+  document.title=ch.name+': combat sheet';
+  $('#tabs').innerHTML=[['combat','Combat'],['stats','Stats'],['features','Features']].map(function(t){return '<button role="tab" data-a="tab" data-v="'+t[0]+'" aria-selected="'+(S.play.tab===t[0])+'">'+t[1]+'</button>'}).join('');
+  renderSide();
+  if(S.play.tab==='stats')renderStats();else if(S.play.tab==='features')renderFeatures();else renderCombat();
+}
+
+/* ---------- events ---------- */
+function applyHp(dmg,amt){
+  var p=S.play;
+  if(dmg){var a=Math.min(p.temp,amt);p.temp-=a;amt-=a;p.hp=Math.max(0,p.hp-amt)}
+  else{var was=p.hp;p.hp=Math.min(S.char.hpMax,p.hp+amt);if(was<=0&&p.hp>0)p.death={s:0,f:0}}
+}
+document.addEventListener('change',function(e){
+  var t=e.target;
+  if(t.id==='pdfIn'&&t.files&&t.files[0]){importFile(t.files[0]);return}
+  var a=t.dataset&&t.dataset.a;
+  if(a==='fl-savage'){F.savage=t.checked;if(F.dmg&&F.out)rollDamage();renderSheet()}
+});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&SH)closeSheet()});
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-a]');
+  if(!b||b.tagName==='INPUT')return;
+  var a=b.dataset.a,v=b.dataset.v,id=b.dataset.id,i=b.dataset.i!=null?+b.dataset.i:null,p=S.play;
+  switch(a){
+   case 'close':closeSheet();return;
+   case 'tab':p.tab=v;break;
+   case 'grp':p.open=p.open===v?'':v;break;
+   case 'menuBtn':break;
+   case 'dmg':case 'heal':{
+     var n=Math.max(0,parseInt($('#hpamt').value,10)||0);
+     if(n){applyHp(a==='dmg',n);$('#hpamt').value=''}
+     break}
+   case 'death':{var c=p.death[b.dataset.k],k2=+b.dataset.i;p.death[b.dataset.k]=k2<c?k2:k2+1;break}
+   case 'tm':if(p.trk[id]>0)p.trk[id]--;break;
+   case 'tp':{var t=trk(id);if(p.trk[id]<t.max)p.trk[id]++;break}
+   case 'insp':p.insp=!p.insp;break;
+   case 'short':
+     M.trackers.forEach(function(t){if(t.rest==='short')p.trk[t.id]=t.max;else if(t.shortRegain)p.trk[t.id]=Math.min(t.max,left(t.id)+t.shortRegain)});
+     toast('Short rest done');break;
+   case 'long':
+     p.hp=S.char.hpMax;p.temp=0;p.death={s:0,f:0};
+     M.trackers.forEach(function(t){p.trk[t.id]=t.max});
+     if(M.resourceful)p.insp=true;
+     toast('Long rest done');break;
+   case 'init':openRoll('Initiative',S.char.init);return;
+   case 'atk':openAttack(i);return;
+   case 'ent':if(id==='opp'){E={e:M.oppEntry,spent:false,heal:null,applied:false,die:null,roll:null};ADV=0;openSheet('entry')}else openEntry(id);return;
+   case 'std':
+     if(b.dataset.n){SUM={name:'Grapple or shove',text:'Replace one of your attacks with an unarmed strike. The target (no more than one size larger) makes a Str or Dex save against DC '+grappleDC()+'.\nGrapple: on a fail it\u2019s grappled, with Speed 0. You need a free hand.\nShove: on a fail you push it 5 ft away or knock it prone.'}}
+     else{var s=STD[i];SUM={name:s[0],text:s[1],roll:s[0]==='Hide'?['Stealth',(S.char.skills.filter(function(x){return x.name==='Stealth'})[0]||{bonus:0}).bonus]:null}}
+     openSheet('std');return;
+   case 'chk':{
+     var ch=S.char;
+     if(b.dataset.k==='ab')openRoll(({str:'Strength',dex:'Dexterity',con:'Constitution',int:'Intelligence',wis:'Wisdom',cha:'Charisma'})[b.dataset.t]+' check',ch.abilities[b.dataset.t].mod);
+     else if(b.dataset.k==='save')openRoll(b.dataset.t.toUpperCase()+' saving throw',ch.abilities[b.dataset.t].save);
+     else{var sk=ch.skills[i];openRoll(sk.name,sk.bonus)}
+     return}
+   case 'adv':ADV=+v;renderSheet();return;
+   case 'r-roll':R.res=d20();renderSheet();return;
+   case 'std-roll':R=null;openRoll(SUM.roll[0],SUM.roll[1]);return;
+   case 'fl-roll':{
+     F.roll=d20();var nat=F.roll.used;
+     F.out=nat===20?'crit':nat===1?'miss':null;F.dmg=null;F.add&&unadd();
+     renderSheet();return}
+   case 'fl-out':F.out=v;if(F.dmg){F.dmg=null}renderSheet();return;
+   case 'fl-dmg':rollDamage();renderSheet();return;
+   case 'fl-add':{
+     var o=M.addons.filter(function(x){return x.id===id})[0];
+     if(o&&spend(M.sdId)){F.add={id:o.id,name:o.name,text:o.text,save:o.save,value:d(M.dieSize)}}
+     renderSheet();return}
+   case 'fl-unadd':unadd();renderSheet();return;
+   case 'fl-next':{var ai=F.ai,n=F.n+1,adv=ADV;openAttack(ai,{adv:adv});F.n=n;renderSheet();return}
+   case 'ent-heal':{
+     var ex=diceExpr(E.e.heal),r=rolls(ex.n,ex.d);
+     if(E.e.trk)spend(E.e.trk);
+     E.heal={rolls:r,mod:ex.mod,total:sum(r)+ex.mod};renderSheet();return}
+   case 'ent-apply':if(E.heal&&!E.applied){applyHp(false,E.heal.total);E.applied=true;save()}renderSheet();return;
+   case 'ent-die':if(spend(M.sdId))E.die=d(M.dieSize);renderSheet();return;
+   case 'ent-roll':{var x=diceExpr(E.e.roll),rr=rolls(x.n,x.d);E.roll={rolls:rr,total:sum(rr)};renderSheet();return}
+   case 'ent-use':if(spend(E.e.trk))E.spent=true;renderSheet();return;
+   case 'spend':if(spend(id))toast('Spent 1 '+trk(id).name);renderSheet();return;
+   case 'ent-atk':{
+     var e2=E.e,ctx={notes:[],adv:e2.adv?1:0};
+     if(E.die!=null)ctx.pre={name:e2.name,value:E.die};
+     e2.more.forEach(function(m){ctx.notes.push(m)});
+     openAttack(i,ctx);return}
+   case 'reset':{
+     var mm=buildModel(DEFAULT_CHAR);S={char:clone(DEFAULT_CHAR),play:freshPlay(DEFAULT_CHAR,mm),imported:''};M=mm;save();closeSheet();toast('Reset');return}
+  }
+  save();render();
+});
+function unadd(){if(F.add&&M.sdId){S.play.trk[M.sdId]=Math.min(trk(M.sdId).max,left(M.sdId)+1);save()}F.add=null}
+$('#menuBtn').addEventListener('click',function(){openSheet('menu')});
+$('#ov').addEventListener('click',function(e){if(e.target.id==='ov')closeSheet()});
+
+render();
+if(window.__SHEET_TEST)window.__SHEET_TEST({applyImport:applyImport,state:function(){return S},model:function(){return M},openAttack:openAttack});
+})();
+</script>
+<script>
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}
+</script>
+</body>
+</html>
