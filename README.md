@@ -41,6 +41,10 @@ When you get a new version of the files, upload them over the old ones.
 Open the app twice while online and the new version appears.
 If a change doesn't show up, change `VERSION` at the top of `sw.js` (for example `v2`) and upload again.
 
+## Appearance
+
+Open the three dots menu, then Appearance, to pick an element colour scheme (Air, Fire, Water, Earth or Storm) for the current character, and to choose light, dark or automatic.
+
 ## Notes
 
 - It starts empty. The first screen is an import. Add as many characters as you like from the menu and switch between them.
