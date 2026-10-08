@@ -463,6 +463,39 @@ details.f{border-top-color:var(--line)}
 /* tracker label gets the full width */
 .trk{grid-template-areas:"l l" "v b";row-gap:2px}
 .trk .lbl{overflow-wrap:break-word}
+.prompt{position:sticky;top:0;z-index:7;background:var(--panel);border:1.5px solid var(--accent-text,var(--accent));border-radius:16px;padding:12px 14px;margin:0 0 12px;box-shadow:0 10px 30px rgba(0,0,0,.28)}
+.prompt p{margin:2px 0 6px}
+.pgrp{margin:8px 0}
+.plabel{font-weight:600;font-size:.92rem}
+.plabel small{color:var(--mute);font-weight:400}
+.pin{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.pin input{flex:1 1 72px;min-width:64px;text-align:center;font-size:1.25rem;font-weight:700}
+.pin input.bad{border-color:var(--hp)}
+.dpillrow{display:flex;justify-content:flex-end;margin:-6px 46px 6px 0}
+.dpill{border:0;border-radius:999px;background:var(--panel2);color:var(--mute);font-size:.78rem;font-weight:600;padding:4px 12px;min-height:30px}
+.dpill[aria-pressed=true]{background:color-mix(in srgb,var(--bon) 26%,var(--panel2));color:var(--ink)}
+.x{z-index:9}
+.verline{margin-top:18px;text-align:center}
+.fsec>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;min-height:44px}
+.fsec>summary::-webkit-details-marker{display:none}
+.fsec>summary h2{margin:0}
+.fsec>summary .cnt{background:var(--panel2);border-radius:999px;padding:2px 10px;font-size:.82rem;color:var(--mute);font-weight:600;margin-left:auto}
+.fsec>summary::after{content:'\25be';color:var(--mute);margin-left:4px;transition:transform .15s}
+.fsec[open]>summary::after{transform:rotate(180deg)}
+details.ft{border-top:1px solid var(--line);padding:0}
+details.ft>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px 10px;min-height:50px;cursor:pointer;flex-wrap:wrap;padding:8px 0;font:600 1rem var(--body)}
+details.ft>summary::-webkit-details-marker{display:none}
+details.ft .fnm{font-weight:600}
+details.ft .ftags{display:flex;flex-wrap:wrap;gap:4px}
+details.ft .ftags .chip{margin:0}
+details.ft .fbody{padding:0 0 12px}
+details.ft .fbody p{color:var(--ink);font-size:.93rem;margin:0 0 8px}
+details.ft .fopts{margin:6px 0 8px;padding-left:18px;font-size:.9rem;color:var(--mute)}
+details.ft .fopts b{color:var(--ink)}
+details.ft .fbody p.fsrc{color:var(--mute);font-size:.78rem}
+.fminor{color:var(--mute);font-size:.88rem;margin:6px 0 8px}
+.fminor b{color:var(--ink)}
+.fhid{margin-top:10px;font-size:.84rem}
 </style>
 </head>
 <body>
@@ -573,7 +606,7 @@ function parseFeatureText(text){
         return;
       }
       if(/^Special$/i.test(body)&&cur){cur.activation=cur.activation||'special';return}
-      if(cur&&/subclass/i.test(cur.name)&&!sub){sub=body.trim();return}
+      if(cur&&/subclass/i.test(cur.name)){cur.subName=body.trim();if(!sub)sub=body.trim();return}
       return;
     }
     addText(line);prevBlank=false;prevText=true;
@@ -721,6 +754,7 @@ function parseDBFields(raw){
 (function(){
 'use strict';
 var KEY='combat-hud-v2';
+var APP_VERSION='0.6';
 var PDFJS='lib/pdf.min.js';
 var PDFJS_WORKER='lib/pdf.worker.min.js';
 
@@ -907,8 +941,8 @@ function toast(msg){var t=$('#toast');t.textContent=msg;t.hidden=false;clearTime
 
 /* ---------- sheet plumbing ---------- */
 var SH=null,ADV=0,F=null,E=null,R=null,SUM=null;
-function openSheet(type){SH=type;$('#ov').hidden=false;renderSheet();$('#sheet').scrollTop=0}
-function closeSheet(){SH=null;$('#ov').hidden=true;render()}
+function openSheet(type){PROMPT=null;SH=type;$('#ov').hidden=false;renderSheet();$('#sheet').scrollTop=0}
+function closeSheet(){PROMPT=null;SH=null;$('#ov').hidden=true;render()}
 function renderSheet(){
   var h='';
   if(SH==='attack'&&F)syncAttackLog();
@@ -920,7 +954,9 @@ function renderSheet(){
   else if(SH==='std')h=stdSheet();
   else if(SH==='menu')h=menuSheet();
   else if(SH==='summary')h=summarySheet();
-  $('#sb').innerHTML=h;
+  var pre=(SH==='attack'||SH==='entry'||SH==='spell'||SH==='rest'||SH==='roll')?dicePill():'';
+  $('#sb').innerHTML=(PROMPT?promptHtml():'')+pre+h;
+  if(PROMPT){var fi=$('#sb .prompt input');if(fi)setTimeout(function(){try{fi.focus()}catch(x){}},60)}
   render();
 }
 function advSeg(){
@@ -933,6 +969,65 @@ function d20(){
   if(ADV===-1&&b<a)used=b;
   return {a:a,b:b,used:used,adv:ADV};
 }
+
+/* ---------- manual dice entry ---------- */
+var PROMPT=null;
+function manual(){return DB.dice==='manual'}
+function ask(title,groups,cb){
+  var live=groups.filter(function(g){return g.n>0});
+  if(!live.length){cb(groups.map(function(){return []}));return}
+  if(!manual()){cb(groups.map(function(g){return rolls(g.n,g.x)}));return}
+  PROMPT={title:title,groups:groups,cb:cb};renderSheet();
+}
+function askD20(title,cb){
+  var gs=ADV?[{label:'First d20',n:1,x:20},{label:'Second d20',n:1,x:20}]:[{label:'d20',n:1,x:20}];
+  ask(title+(ADV===1?' (advantage: roll twice and enter both)':ADV===-1?' (disadvantage: roll twice and enter both)':''),gs,function(arr){
+    var a=arr[0][0],b=ADV?arr[1][0]:null,used=a;
+    if(ADV===1&&b>a)used=b;
+    if(ADV===-1&&b<a)used=b;
+    cb({a:a,b:b,used:used,adv:ADV});
+  });
+}
+function promptHtml(){
+  if(!PROMPT)return '';
+  var h='<div class="prompt" role="group" aria-label="Enter your roll"><b>Enter your roll</b><p class="muted">'+esc(PROMPT.title)+'</p>';
+  PROMPT.groups.forEach(function(g,gi){
+    if(g.n<=0)return;
+    h+='<div class="pgrp"><span class="plabel">'+esc(g.label)+' <small>('+g.n+'d'+g.x+')</small></span><div class="pin">';
+    if(g.n<=4){for(var k=0;k<g.n;k++)h+='<input type="number" inputmode="numeric" min="1" max="'+g.x+'" data-pg="'+gi+'" data-pk="'+k+'" aria-label="'+esc(g.label)+', die '+(k+1)+'" placeholder="1\u2013'+g.x+'">'}
+    else h+='<input type="number" inputmode="numeric" min="'+g.n+'" max="'+(g.n*g.x)+'" data-pg="'+gi+'" data-pk="t" aria-label="'+esc(g.label)+', total" placeholder="Total of '+g.n+' dice ('+g.n+'\u2013'+(g.n*g.x)+')">';
+    h+='</div></div>';
+  });
+  return h+'<div class="two2"><button class="btn pri" data-a="pr-ok">Use these numbers</button><button class="btn" data-a="pr-auto">Roll it for me</button></div><button class="btn" data-a="pr-cancel" style="margin-top:8px;width:100%">Cancel</button></div>';
+}
+function promptOk(){
+  var pr=PROMPT;if(!pr)return;
+  var out=[],bad=false;
+  pr.groups.forEach(function(g,gi){
+    var arr=[];
+    if(g.n<=0){out.push(arr);return}
+    if(g.n<=4){
+      for(var k=0;k<g.n;k++){
+        var el=$('#sb [data-pg="'+gi+'"][data-pk="'+k+'"]'),n=parseInt(el&&el.value,10);
+        if(isNaN(n)||n<1||n>g.x){bad=true;if(el)el.classList.add('bad')}else arr.push(n);
+      }
+    }else{
+      var e2=$('#sb [data-pg="'+gi+'"][data-pk="t"]'),t=parseInt(e2&&e2.value,10);
+      if(isNaN(t)||t<g.n||t>g.n*g.x){bad=true;if(e2)e2.classList.add('bad')}else arr.push(t);
+    }
+    out.push(arr);
+  });
+  if(bad){toast('Check the numbers: each die is 1 up to its size');return}
+  PROMPT=null;pr.cb(out);
+}
+function promptAuto(){var pr=PROMPT;if(!pr)return;PROMPT=null;pr.cb(pr.groups.map(function(g){return rolls(g.n,g.x)}))}
+function dicePill(){return '<div class="dpillrow"><button class="dpill" data-a="dicemode" aria-pressed="'+manual()+'" title="Switch between app dice and your own dice">Dice: '+(manual()?'my own':'app')+'</button></div>'}
+function diceMenuHtml(){
+  var m=manual()?'manual':'app';
+  return '<h3>Dice</h3><p class="muted">Rolling physical dice at the table? Choose <b>I roll my own</b> and every roll asks for your numbers instead of rolling for you. You can still tap <i>Roll it for me</i> on any single roll.</p><div class="seg" role="group" aria-label="Dice">'
+   +[['app','App rolls for me'],['manual','I roll my own']].map(function(o){return '<button data-a="dicemode" data-v="'+o[0]+'" aria-pressed="'+(m===o[0])+'">'+o[1]+'</button>'}).join('')+'</div>';
+}
+
 function d20Text(r,bonus){
   var t='d20 '+r.used+' '+(bonus<0?'\u2212 ':'+ ')+Math.abs(bonus);
   if(r.b!=null)t+=' (rolled '+r.a+' and '+r.b+', '+(r.adv===1?'kept higher':'kept lower')+')';
@@ -1074,13 +1169,18 @@ function renderLog(){
   $('#view').innerHTML=h;
 }
 
-function rollDamage(){
+function rollDamage(done){
   var a=S.char.attacks[F.ai],p=dmgParse(a.dmg),crit=F.out==='crit';
-  var nd=p.n*(crit?2:1),r1=p.d?rolls(nd,p.d):[],r2=null,use=r1,idx=0;
-  if(F.savage&&p.d){r2=rolls(nd,p.d);if(sum(r2)>sum(r1)){use=r2;idx=1}}
-  F.dmg={p:p,a:r1,b:r2,used:use,usedIdx:idx,sum:sum(use),crit:crit};
-  if(F.savage&&p.d){S.play.once['savage-attacker']=true;F.savageUsed=true;save()}
-  else if(F.savageUsed){delete S.play.once['savage-attacker'];F.savageUsed=false;save()}
+  var nd=p.n*(crit?2:1),groups=p.d?[{label:'Damage dice',n:nd,x:p.d}]:[];
+  if(F.savage&&p.d){groups[0].label='First roll';groups.push({label:'Second roll (Savage Attacker)',n:nd,x:p.d})}
+  ask('Roll '+nd+'d'+p.d+(crit?' for the critical hit':'')+' ('+aName(a)+')',groups,function(arr){
+    var r1=p.d?arr[0]:[],r2=null,use=r1,idx=0;
+    if(F.savage&&p.d){r2=arr[1];if(sum(r2)>sum(r1)){use=r2;idx=1}}
+    F.dmg={p:p,a:r1,b:r2,used:use,usedIdx:idx,sum:sum(use),crit:crit};
+    if(F.savage&&p.d){S.play.once['savage-attacker']=true;F.savageUsed=true;save()}
+    else if(F.savageUsed){delete S.play.once['savage-attacker'];F.savageUsed=false;save()}
+    done();
+  });
 }
 
 /* ---------- flowchart view ---------- */
@@ -1613,6 +1713,23 @@ function hasGear(){
   var g=S&&S.char.gear;if(!g)return false;
   return g.items.length>0||g.attuned.length>0||['cp','sp','ep','gp','pp'].some(function(k){return num(g.coins[k])>0});
 }
+/* ---------- tidy gear and features ---------- */
+function wnum(s){var m=String(s==null?'':s).replace(/,/g,'').match(/[\d.]+/);return m?parseFloat(m[0]):0}
+function fmtNum(n){return (Math.round(n*10)/10).toLocaleString('en-GB')}
+function mergeItems(items){
+  var out=[],idx={};
+  (items||[]).forEach(function(it){
+    var k=String(it.name).trim().toLowerCase(),q=wnum(it.qty)||1,w=wnum(it.weight);
+    if(idx[k]===undefined){idx[k]=out.length;out.push({name:String(it.name).trim(),qty:q,w:w});return}
+    var e=out[idx[k]];
+    if(e.w>0&&w>0){e.qty+=q;e.w+=w}
+    else{e.qty=Math.max(e.qty,q);if(!e.w)e.w=w}
+  });
+  return out;
+}
+function gearRow(x){
+  return '<div class="grow"><span class="gn">'+esc(x.name)+'</span><span class="gq">'+(x.qty>1?'\u00d7'+fmtNum(x.qty):'')+'</span><span class="gw">'+(x.w>0?fmtNum(x.w)+' lb.':'')+'</span></div>';
+}
 function renderGear(){
   var g=S.char.gear,h='';
   var coins=[['pp','Platinum'],['gp','Gold'],['ep','Electrum'],['sp','Silver'],['cp','Copper']].filter(function(k){return num(g.coins[k[0]])>0});
@@ -1623,10 +1740,78 @@ function renderGear(){
     h+='<div class="card" style="margin-top:12px"><h2 class="sec">Carrying</h2><p><b>'+esc(g.carried||'0 lb.')+'</b>'+(lim?' of '+esc(g.encumbered):'')+'</p>'+(lim?'<div class="bar"><i style="width:'+pct+'%;background:'+(cw>lim?'var(--hp)':'var(--accent)')+'"></i></div>':'')
      +(push?'<p class="muted">Push, drag or lift up to '+esc(String(g.push).replace(/\.$/,''))+'.</p>':'')+'</div>';
   }
-  if(g.attuned.length)h+='<div class="card" style="margin-top:12px"><h2 class="sec">Attuned magic items</h2>'+g.attuned.map(function(x){return '<div class="grow"><span class="gn">'+esc(x.name)+'</span><span class="gq">'+(x.qty&&x.qty!=='1'?'\u00d7'+esc(x.qty):'')+'</span><span class="gw">'+esc(x.weight)+'</span></div>'}).join('')+'</div>';
-  if(g.items.length)h+='<div class="card" style="margin-top:12px"><h2 class="sec">Equipment</h2>'+g.items.map(function(x){return '<div class="grow"><span class="gn">'+esc(x.name)+'</span><span class="gq">'+(x.qty&&x.qty!=='1'?'\u00d7'+esc(x.qty):'')+'</span><span class="gw">'+esc(x.weight)+'</span></div>'}).join('')+'</div>';
+  var att=mergeItems(g.attuned),attNames={};
+  att.forEach(function(x){attNames[x.name.toLowerCase()]=1});
+  if(att.length)h+='<div class="card" style="margin-top:12px"><h2 class="sec">Attuned magic items</h2><p class="muted" style="margin-bottom:6px">'+att.length+' of 3 attunement slots used</p>'+att.map(gearRow).join('')+'</div>';
+  var eq=mergeItems(g.items.filter(function(x){return !attNames[String(x.name).trim().toLowerCase()]}));
+  if(eq.length){
+    var tw=eq.reduce(function(s,x){return s+x.w},0);
+    h+='<div class="card" style="margin-top:12px"><h2 class="sec">Equipment</h2><p class="muted" style="margin-bottom:6px">'+eq.length+' item'+(eq.length===1?'':'s')+(tw>0?' \u00b7 '+fmtNum(tw)+' lb. listed':'')+'</p>'+eq.map(gearRow).join('')+'</div>';
+  }
   $('#view').innerHTML=h;
 }
+function secTitle(raw){
+  var r=String(raw||'').trim();
+  if(/^FEATS$/i.test(r))return 'Feats';
+  var t=r.replace(/\s*(FEATURES|SPECIES TRAITS|TRAITS)\s*$/i,'').toLowerCase().replace(/\b\w/g,function(c){return c.toUpperCase()});
+  if(/SPECIES TRAITS$/i.test(r))return (t||'Species')+' traits';
+  return t||'Other';
+}
+var ACT_LABEL={bonus:'Bonus action',reaction:'Reaction',action:'Action',special:'Special'};
+function featTags(f){
+  var h='';
+  var act=f.activation||(f.acts&&f.acts[0]&&f.acts[0].activation)||'';
+  if(act&&ACT_LABEL[act])h+='<span class="chip '+(act==='special'?'':act)+'">'+ACT_LABEL[act]+'</span>';
+  var us=usagesOf(f)[0];
+  if(us){
+    var tk=trk(dbSlug(tkName(f,us)));
+    if(us.rest==='other')h+='<span class="chip">'+(tk?left(tk.id)+' of '+tk.max:us.max)+' (manual)</span>';
+    else h+='<span class="chip">'+(tk?left(tk.id)+' of '+tk.max+' left':us.max+' per '+us.rest+' rest')+'</span>';
+  }
+  return h;
+}
+function featRow(f){
+  var body='';
+  if(f.text)body+=paras(f.text);
+  if(f.options&&f.options.length){
+    body+='<ul class="fopts">'+f.options.filter(function(o){return o.name}).map(function(o){return '<li><b>'+esc(o.name.replace(/\s*\u2022\s*$/,''))+'</b>'+(o.text?' '+esc(String(o.text).replace(/\n+/g,' ')):'')+'</li>'}).join('')+'</ul>';
+  }
+  if(f.source)body+='<p class="fsrc">'+esc(f.source)+'</p>';
+  return '<details class="f ft"><summary><span class="fnm">'+esc(f.name)+'</span><span class="ftags">'+featTags(f)+'</span></summary><div class="fbody">'+body+'</div></details>';
+}
+function renderFeatures(){
+  var ch=S.char,groups=[],byRaw={};
+  ch.features.forEach(function(f){
+    var k=f.section||'';
+    if(!byRaw[k]){byRaw[k]={raw:k,list:[]};groups.push(byRaw[k])}
+    byRaw[k].list.push(f);
+  });
+  var h='',firstClass=true;
+  groups.forEach(function(g,gi){
+    var shown=[],bare=[],minor=[];
+    var isSpecies=/SPECIES TRAITS$/i.test(g.raw),isClass=/FEATURES$/i.test(g.raw);
+    g.list.forEach(function(f){
+      var empty=!f.text&&!(f.options&&f.options.length)&&!f.uses&&!f.activation&&!(f.acts&&f.acts.length);
+      if(empty)bare.push(f);
+      else if(isSpecies&&/^(Creature Type|Size|Speed)$/i.test(f.name))minor.push(f);
+      else shown.push(f);
+    });
+    var sub='';
+    if(isClass){
+      var sp=g.list.filter(function(f){return /Subclass$/i.test(f.name)})[0];
+      if(sp)sub=sp.subName||(firstClass?ch.sub:'');
+      firstClass=false;
+    }
+    var title=secTitle(g.raw)+(sub?' \u00b7 '+sub:'');
+    h+='<section class="card fsecwrap" style="margin-top:'+(gi?'12px':'0')+'"><details class="fsec"'+(gi===0?' open':'')+'><summary><h2 class="sec">'+esc(title)+'</h2><span class="cnt">'+shown.length+'</span></summary>';
+    if(minor.length)h+='<p class="fminor">'+minor.map(function(f){return '<b>'+esc(f.name)+'</b> '+esc(String(f.text||'').replace(/\s+/g,' '))}).join(' ')+'</p>';
+    h+=shown.map(featRow).join('');
+    if(bare.length)h+='<p class="muted fhid">Also on your sheet, with no description: '+bare.map(function(f){return esc(f.name)}).join(', ')+'.</p>';
+    h+='</details></section>';
+  });
+  $('#view').innerHTML=h||'<div class="card"><p class="muted">No features were found on this sheet.</p></div>';
+}
+
 function cleanMarks(t){return String(t||'').replace(/===\s*(.+?)\s*===/g,'$1:').replace(/[ \t]+\n/g,'\n').trim()}
 function renderStory(){
   var ch=S.char,d=ch.details||{},st=ch.story||{},h='';
@@ -1698,6 +1883,7 @@ function menuSheet(){
     h+='<div class="crow"><button class="row'+(id===DB.active?' act-on':'')+'" data-a="switch" data-id="'+esc(id)+'"><span class="rn">'+esc(c.name)+'<small>'+esc((c.cls?c.cls+' '+c.level:'Level '+c.level)+(c.sub?' \u00b7 '+c.sub:''))+'</small></span><span class="rt">'+(id===DB.active?'Open':'Switch')+'</span></button>'
      +'<button class="btn'+(DELARM===id?' dmg':'')+'" data-a="delchar" data-id="'+esc(id)+'">'+(DELARM===id?'Tap again to delete':'Delete')+'</button></div>';
   });
+  h+=diceMenuHtml();
   h+=appearanceHtml();
   h+='<h3>Import or update</h3>'
    +'<p class="muted">New character: import their D&amp;D Beyond PDF. Leveled up? Import the new PDF of the same character and it updates them, keeping current HP and used resources. You\u2019ll see what changed.</p>'
@@ -1705,6 +1891,7 @@ function menuSheet(){
    +'<p class="impMsg muted" style="margin-top:10px"></p>'
    +'<h3>Data</h3><p class="muted">Everything is stored on this device only.</p>'
    +'<button class="btn'+(DELARM==='all'?' dmg':'')+' big" data-a="clearall" style="margin-top:8px">'+(DELARM==='all'?'Tap again to erase everything':'Erase all characters')+'</button>';
+  h+='<p class="muted verline">Combat HUD version '+APP_VERSION+' (beta). Unofficial fan tool.</p>';
   return h;
 }
 function summarySheet(){
@@ -1889,17 +2076,6 @@ function renderStats(){
   if(ch.proficiencies)h+='<div class="card" style="margin-top:12px"><h2 class="sec">Proficiencies</h2><p class="pre">'+esc(ch.proficiencies)+'</p></div>';
   $('#view').innerHTML=h;
 }
-function renderFeatures(){
-  var ch=S.char,h='<div class="card">',sec='';
-  ch.features.forEach(function(f){
-    if(f.section!==sec){sec=f.section;h+='<h2 class="sec" style="margin-top:14px">'+esc(sec.toLowerCase().replace(/\b\w/g,function(c){return c.toUpperCase()}))+'</h2>'}
-    var tag=(f.uses?'<span class="chip">'+f.uses.max+' per '+f.uses.rest+' rest</span>':'')+(f.activation&&f.activation!=='special'&&f.activation!=='action'?'<span class="chip '+f.activation+'">'+({bonus:'Bonus action',reaction:'Reaction'}[f.activation])+'</span>':'');
-    h+='<details class="f"><summary>'+esc(f.name)+tag+'</summary>'+(f.text?paras(f.text):'<p>See the options below or your D&amp;D Beyond sheet.</p>');
-    f.options.forEach(function(o){h+='<div class="opt"><b>'+esc(o.name)+'</b>'+paras(o.text)+'</div>'});
-    h+='</details>';
-  });
-  $('#view').innerHTML=h+'</div>';
-}
 function welcomeHtml(){
   return '<div class="card welcome"><h2 class="sec">Import your character</h2>'
    +'<ol><li>In D&amp;D Beyond, open your character, tap <b>Manage</b>, then <b>Export to PDF</b>.</li><li>Choose that PDF here.</li></ol>'
@@ -1960,7 +2136,7 @@ document.addEventListener('change',function(e){
   var t=e.target;
   if(t.classList&&t.classList.contains('pdfIn')&&t.files&&t.files[0]){var pf=t.files[0];importFile(pf);try{t.value=''}catch(x){}return}
   var a=t.dataset&&t.dataset.a;
-  if(a==='fl-savage'){F.savage=t.checked;if(F.dmg&&F.out)rollDamage();renderSheet()}
+  if(a==='fl-savage'){F.savage=t.checked;if(F.dmg&&F.out)rollDamage(function(){renderSheet()});else renderSheet()}
 });
 document.addEventListener('input',function(e){if(e.target&&e.target.id==='spq'){S.play.sq=e.target.value;renderSpellList()}});
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&SH)closeSheet()});
@@ -1968,6 +2144,7 @@ document.addEventListener('click',function(e){
   var b=e.target.closest('[data-a]');
   if(!b||b.tagName==='INPUT')return;
   var a=b.dataset.a,v=b.dataset.v,id=b.dataset.id,i=b.dataset.i!=null?+b.dataset.i:null,p=S?S.play:null;
+  if(PROMPT&&a.indexOf('pr-')!==0)PROMPT=null;
   switch(a){
    case 'close':closeSheet();return;
    case 'tab':p.tab=v;break;
@@ -1985,13 +2162,15 @@ document.addEventListener('click',function(e){
    case 'hd-spend':{
      var hdie=+b.dataset.d,hcon=S.char.abilities.con.mod;
      if(hdLeft(hdie)>0&&p.hp<S.char.hpMax){
-       p.hd['d'+hdie]=hdLeft(hdie)-1;var hr=d(hdie),hheal=Math.max(0,hr+hcon),hbefore=p.hp;
-       applyHp(false,hheal,'Hit die');
-       RST.last={die:hdie,roll:hr,heal:p.hp-hbefore};
-       logAdd('feature',{name:'Spent a hit die',detail:'d'+hdie+': '+hr+(hcon?' '+sgn(hcon):'')+' = '+hheal+' HP'});
-       save();
-     }
-     renderSheet();return}
+       ask('Hit die (d'+hdie+')',[{label:'Hit die',n:1,x:hdie}],function(arr){
+         p.hd['d'+hdie]=hdLeft(hdie)-1;var hr=arr[0][0],hheal=Math.max(0,hr+hcon),hbefore=p.hp;
+         applyHp(false,hheal,'Hit die');
+         RST.last={die:hdie,roll:hr,heal:p.hp-hbefore};
+         logAdd('feature',{name:'Spent a hit die',detail:'d'+hdie+': '+hr+(hcon?' '+sgn(hcon):'')+' = '+hheal+' HP'});
+         save();renderSheet();
+       });
+     }else renderSheet();
+     return}
    case 'rest-finish':
      M.trackers.forEach(function(t){if(t.rest==='short')p.trk[t.id]=t.max;else if(t.shortRegain)p.trk[t.id]=Math.min(t.max,left(t.id)+t.shortRegain)});
      p.once={};
@@ -2018,28 +2197,50 @@ document.addEventListener('click',function(e){
      return}
    case 'sp-crit':SP.crit=!SP.crit;renderSheet();return;
    case 'sp-dmg':{
-     var def0=spellDef(SP.s),L0=castLevel();SP.dm={parts:[]};
-     def0.p.forEach(function(part){var ds=scalePart(SP.s,part,L0),o=parseDice(ds),mult=(part.atk&&SP.crit)?2:1,r=rolls(o.n*mult,o.x);SP.dm.parts.push({label:part.label||'',dice:ds+(mult>1?' doubled':''),type:part.t,half:!!part.half,rolls:r,total:sum(r)+o.k})});
-     logSpell();renderSheet();return}
+     var def0=spellDef(SP.s),L0=castLevel(),pg=[],pm=[];
+     def0.p.forEach(function(part){var ds=scalePart(SP.s,part,L0),o=parseDice(ds),mult=(part.atk&&SP.crit)?2:1;pm.push({part:part,ds:ds,o:o,mult:mult});pg.push({label:part.label||'Damage',n:o.n*mult,x:o.x})});
+     ask('Roll the damage for '+SP.s.name,pg,function(arr){
+       SP.dm={parts:[]};
+       pm.forEach(function(q,qi){var r=arr[qi];SP.dm.parts.push({label:q.part.label||'',dice:q.ds+(q.mult>1?' doubled':''),type:q.part.t,half:!!q.part.half,rolls:r,total:sum(r)+q.o.k})});
+       logSpell();renderSheet();
+     });
+     return}
    case 'sp-darts':{
-     var df=spellDef(SP.s);projInit(df);var pd=parseDice(df.proj.dmg);
-     SP.dm.proj.forEach(function(r){var rr=rolls(pd.n,pd.x);r.rolls=rr;r.dmg=sum(rr)+pd.k});
-     logSpell();renderSheet();return}
-   case 'sp-ratk':{var df2=spellDef(SP.s);projInit(df2);SP.dm.proj[i].atk=d20();if(SP.dm.proj[i].atk.used===1)SP.dm.proj[i].hit=false;renderSheet();return}
+     var df=spellDef(SP.s);projInit(df);var pd=parseDice(df.proj.dmg),dg=[];
+     SP.dm.proj.forEach(function(r,k){dg.push({label:'Dart '+(k+1),n:pd.n,x:pd.x})});
+     ask('Roll each '+df.proj.label.replace(/s$/,'')+' for '+SP.s.name,dg,function(arr){
+       SP.dm.proj.forEach(function(r,k){r.rolls=arr[k];r.dmg=sum(arr[k])+pd.k});
+       logSpell();renderSheet();
+     });
+     return}
+   case 'sp-ratk':{
+     var df2=spellDef(SP.s);projInit(df2);var ri=i;
+     askD20('Ray '+(ri+1)+' attack',function(r){SP.dm.proj[ri].atk=r;if(r.used===1)SP.dm.proj[ri].hit=false;renderSheet()});
+     return}
    case 'sp-rhit':{var df3=spellDef(SP.s);projInit(df3);var r3=SP.dm.proj[i];r3.hit=v==='1';if(!r3.hit){r3.dmg=null;r3.rolls=null}logSpell();renderSheet();return}
    case 'sp-rdmg':{
-     var df4=spellDef(SP.s);projInit(df4);var pd4=parseDice(df4.proj.dmg),r4=SP.dm.proj[i],m4=(r4.atk&&r4.atk.used===20)?2:1,rr4=rolls(pd4.n*m4,pd4.x);
-     r4.rolls=rr4;r4.dmg=sum(rr4)+pd4.k;logSpell();renderSheet();return}
+     var df4=spellDef(SP.s);projInit(df4);var pd4=parseDice(df4.proj.dmg),r4=SP.dm.proj[i],m4=(r4.atk&&r4.atk.used===20)?2:1;
+     ask('Ray '+(i+1)+' damage'+(m4>1?' (doubled for the critical hit)':''),[{label:'Ray '+(i+1),n:pd4.n*m4,x:pd4.x}],function(arr){
+       r4.rolls=arr[0];r4.dmg=sum(arr[0])+pd4.k;logSpell();renderSheet();
+     });
+     return}
    case 'sp-cust':{
      var inp=$('#sdc'),dv=inp?inp.value.trim():'',oc=parseDice(dv);
      if(!oc){toast('Enter dice like 4d6 or 8d6+2');return}
      SP.custDice=dv;SP.custHalf=!!($('#sdh')&&$('#sdh').checked);
-     var rc=rolls(oc.n,oc.x);SP.dm={custom:{dice:dv,rolls:rc,total:sum(rc)+oc.k,half:SP.custHalf}};
-     logSpell();renderSheet();return}
+     ask('Roll '+dv+' for '+SP.s.name,[{label:'Damage',n:oc.n,x:oc.x}],function(arr){
+       var rc=arr[0];SP.dm={custom:{dice:dv,rolls:rc,total:sum(rc)+oc.k,half:SP.custHalf}};
+       logSpell();renderSheet();
+     });
+     return}
    case 'sp-heal':{
-     var dh=spellDef(SP.s),hh=dh.heal||dh.temp,dsh=scalePart(SP.s,{d:hh.d,up:hh.up},castLevel()),oh=parseDice(dsh),modh=hh.mod?spellMod(SP.s):0,rh=rolls(oh.n,oh.x);
-     SP.dm={heal:{dice:dsh,rolls:rh,mod:modh,total:Math.max(0,sum(rh)+oh.k+modh),temp:!!dh.temp}};SP.healApplied=false;
-     logSpell();renderSheet();return}
+     var dh=spellDef(SP.s),hh=dh.heal||dh.temp,dsh=scalePart(SP.s,{d:hh.d,up:hh.up},castLevel()),oh=parseDice(dsh),modh=hh.mod?spellMod(SP.s):0;
+     ask('Roll '+dsh+(dh.temp?' temporary HP':' healing')+' for '+SP.s.name,[{label:dh.temp?'Temporary HP':'Healing',n:oh.n,x:oh.x}],function(arr){
+       var rh=arr[0];
+       SP.dm={heal:{dice:dsh,rolls:rh,mod:modh,total:Math.max(0,sum(rh)+oh.k+modh),temp:!!dh.temp}};SP.healApplied=false;
+       logSpell();renderSheet();
+     });
+     return}
    case 'sp-apply':{
      var hl2=SP.dm&&SP.dm.heal;
      if(hl2&&!SP.healApplied){
@@ -2065,7 +2266,10 @@ document.addEventListener('click',function(e){
      }
      logAdd('feature',{name:'Cast '+s0.name,detail:(typeof lv0==='number'&&lv0>0?'level '+lv0+' slot, '+slotLeft(lv0)+' left':lv0==='ritual'?'as a ritual':lv0==='free'?'free cast':'cantrip')+(s0.conc?' \u00b7 concentration':'')});
      save();renderSheet();return}
-   case 'sp-atk':{var at0=SP.s.saveHit.match(/\+\d+|-\d+/),bn0=+at0[0];SP.atk=d20();if(SP.atk.used===20)SP.crit=true;logPlace(SP,'check',{name:SP.s.name+' spell attack',total:SP.atk.used+bn0,detail:d20Text(SP.atk,bn0)});renderSheet();return}
+   case 'sp-atk':{
+     var at0=SP.s.saveHit.match(/\+\d+|-\d+/),bn0=+at0[0];
+     askD20(SP.s.name+' spell attack',function(r){SP.atk=r;if(r.used===20)SP.crit=true;logPlace(SP,'check',{name:SP.s.name+' spell attack',total:r.used+bn0,detail:d20Text(r,bn0)});renderSheet()});
+     return}
    case 'sp-flow':openAttack(i,{source:'Cast '+SP.s.name,adv:fxBonus().adv?1:0});return;
    case 'conc-end':if(p.conc){logAdd('note',{text:'Concentration on '+p.conc.name+' ended'});p.conc=null}p.concCheck=null;break;
    case 'conc-keep':logAdd('note',{text:'Concentration held on '+(p.conc?p.conc.name:'the spell')+' (DC '+p.concCheck.dc+')'});p.concCheck=null;break;
@@ -2076,28 +2280,55 @@ document.addEventListener('click',function(e){
    case 'font-make':{var fm0=+b.dataset.l,cs0=M.spCost[fm0];if(left(M.spId)>=cs0&&slotLeft(fm0)<slotMax(fm0)){p.trk[M.spId]=left(M.spId)-cs0;p.slots[fm0]=slotLeft(fm0)+1;logAdd('feature',{name:'Font of Magic',detail:'spent '+cs0+' Sorcery Points for a level '+fm0+' slot'})}break}
    case 'ent-slot':{var e3=E.e,lv3=e3.slotCreate;if(M.spId&&left(M.spId)>=e3.cost&&slotLeft(lv3)<slotMax(lv3)){p.trk[M.spId]=left(M.spId)-e3.cost;p.slots[lv3]=slotLeft(lv3)+1;E.slotDone=true;logAdd('feature',{name:e3.name,detail:'spent '+e3.cost+' Sorcery Points for a level '+lv3+' slot'})}renderSheet();return}
    case 'ent-regain':{var tk3=trk(M.spId);if(!E.regained&&tk3){var bf3=left(M.spId);p.trk[M.spId]=Math.min(tk3.max,bf3+E.e.regainSP);E.regained=true;logAdd('feature',{name:E.e.name,detail:'regained '+(left(M.spId)-bf3)+' Sorcery Points'})}renderSheet();return}
+   case 'dicemode':DB.dice=(v?v:(manual()?'app':'manual'));PROMPT=null;save();renderSheet();return;
+   case 'pr-ok':promptOk();return;
+   case 'pr-auto':promptAuto();return;
+   case 'pr-cancel':PROMPT=null;renderSheet();return;
    case 'adv':ADV=+v;renderSheet();return;
-   case 'r-roll':R.res=d20();logPlace(R,'check',{name:R.title,total:R.res.used+R.bonus,detail:d20Text(R.res,R.bonus)});renderSheet();return;
+   case 'r-roll':askD20(R.title,function(r){R.res=r;logPlace(R,'check',{name:R.title,total:r.used+R.bonus,detail:d20Text(r,R.bonus)});renderSheet()});return;
    case 'std-roll':R=null;openRoll(SUM.roll[0],SUM.roll[1]);return;
-   case 'fl-roll':{
-     F.roll=d20();var nat=F.roll.used;
-     F.out=nat===20?'crit':nat===1?'miss':null;F.dmg=null;F.add&&unadd();clearRiders();clearSavage();
-     renderSheet();return}
+   case 'fl-roll':
+     askD20('Roll to hit',function(r){
+       F.roll=r;var nat=r.used;
+       F.out=nat===20?'crit':nat===1?'miss':null;F.dmg=null;F.add&&unadd();clearRiders();clearSavage();
+       renderSheet();
+     });return;
    case 'fl-out':F.out=v;if(F.dmg){F.dmg=null}clearRiders();clearSavage();save();renderSheet();return;
-   case 'fl-dmg':rollDamage();renderSheet();return;
+   case 'fl-dmg':rollDamage(function(){renderSheet()});return;
    case 'fl-add':{
      var o=M.addons.filter(function(x){return x.id===id})[0];
-     if(o&&!(F.pre&&M.onlyOne)&&spend(M.sdId)){F.add={id:o.id,name:o.name,text:o.text,save:o.save,value:d(M.dieSize)}}
-     renderSheet();return}
+     if(o&&!(F.pre&&M.onlyOne)&&left(M.sdId)>0){
+       ask(o.name+' (superiority die d'+M.dieSize+')',[{label:'Superiority die',n:1,x:M.dieSize}],function(arr){
+         if(spend(M.sdId))F.add={id:o.id,name:o.name,text:o.text,save:o.save,value:arr[0][0]};
+         renderSheet();
+       });
+     }else renderSheet();
+     return}
    case 'fl-unadd':unadd();renderSheet();return;
    case 'fl-next':{var ai=F.ai,n=F.n+1,adv=ADV;openAttack(ai,{adv:adv});F.n=n;renderSheet();return}
    case 'ent-heal':{
-     var ex=diceExpr(E.e.heal),r=rolls(ex.n,ex.d);
-     if(E.e.trk)spend(E.e.trk);
-     E.heal={rolls:r,mod:ex.mod,total:sum(r)+ex.mod};logAdd('feature',{name:E.e.name,detail:'rolled '+E.e.heal+' = '+E.heal.total+' HP to regain'});renderSheet();return}
+     var ex=diceExpr(E.e.heal);
+     ask('Roll '+E.e.heal+' ('+E.e.name+')',[{label:E.e.name,n:ex.n,x:ex.d}],function(arr){
+       var r=arr[0];
+       if(E.e.trk)spend(E.e.trk);
+       E.heal={rolls:r,mod:ex.mod,total:sum(r)+ex.mod};logAdd('feature',{name:E.e.name,detail:'rolled '+E.e.heal+' = '+E.heal.total+' HP to regain'});renderSheet();
+     });
+     return}
    case 'ent-apply':if(E.heal&&!E.applied){applyHp(false,E.heal.total,E.e.name);E.applied=true;save()}renderSheet();return;
-   case 'ent-die':if(spend(M.sdId)){E.die=d(M.dieSize);logAdd('feature',{name:E.e.name,detail:'spent a superiority die (d'+M.dieSize+'): '+E.die+', '+left(M.sdId)+' left'})}renderSheet();return;
-   case 'ent-roll':{var x=diceExpr(E.e.roll),rr=rolls(x.n,x.d);E.roll={rolls:rr,total:sum(rr)};logAdd('feature',{name:E.e.name,detail:'rolled '+E.e.roll+': '+E.roll.total});renderSheet();return}
+   case 'ent-die':
+     if(left(M.sdId)>0){
+       ask('Superiority die (d'+M.dieSize+')',[{label:'Superiority die',n:1,x:M.dieSize}],function(arr){
+         if(spend(M.sdId)){E.die=arr[0][0];logAdd('feature',{name:E.e.name,detail:'spent a superiority die (d'+M.dieSize+'): '+E.die+', '+left(M.sdId)+' left'})}
+         renderSheet();
+       });
+     }else renderSheet();
+     return;
+   case 'ent-roll':{
+     var x=diceExpr(E.e.roll);
+     ask('Roll '+E.e.roll+' ('+E.e.name+')',[{label:E.e.name,n:x.n,x:x.d}],function(arr){
+       var rr=arr[0];E.roll={rolls:rr,total:sum(rr)};logAdd('feature',{name:E.e.name,detail:'rolled '+E.e.roll+': '+E.roll.total});renderSheet();
+     });
+     return}
    case 'ent-use':if(spend(E.e.trk)){E.spent=true;if(E.e.effect){S.play.effects[E.e.effect.id]=true;save()}logAdd('feature',{name:E.e.name,detail:'used, '+left(E.e.trk)+' left'})}renderSheet();return;
    case 'spend':if(spend(id)){toast('Spent 1 '+trk(id).name);logAdd('feature',{name:(E?E.e.name:'Feature'),detail:'spent 1 '+trk(id).name+', '+left(id)+' left'})}renderSheet();return;
    case 'ent-atk':{
@@ -2122,8 +2353,13 @@ document.addEventListener('click',function(e){
    case 'lg-delpast':if(LGARM==='p'+i){LG().past.splice(i,1);LGARM='';save()}else LGARM='p'+i;break;
    case 'fl-rider':{
      var rd=M.riders.filter(function(x){return x.id===id})[0];
-     if(rd){var rx=diceExpr(rd.dice),rr2=rolls(rx.n*(F.out==='crit'&&!rd.spellOnly?2:1),rx.d);F.riders.push({id:rd.id,name:rd.name,rolls:rr2,value:sum(rr2)});if(rd.once!==false)p.once[rd.id]=true;save()}
-     renderSheet();return}
+     if(rd){
+       var rx=diceExpr(rd.dice),cnt=rx.n*(F.out==='crit'&&!rd.spellOnly?2:1);
+       ask(rd.name+' ('+cnt+'d'+rx.d+(F.out==='crit'&&!rd.spellOnly?', doubled for the critical hit':'')+')',[{label:rd.name,n:cnt,x:rx.d}],function(arr){
+         var rr2=arr[0];F.riders.push({id:rd.id,name:rd.name,rolls:rr2,value:sum(rr2)});if(rd.once!==false)p.once[rd.id]=true;save();renderSheet();
+       });
+     }else renderSheet();
+     return}
    case 'fl-unrider':{
      F.riders=F.riders.filter(function(x){if(x.id===id){delete p.once[id];return false}return true});
      save();renderSheet();return}

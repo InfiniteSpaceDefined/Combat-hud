@@ -8,7 +8,7 @@ Combat HUD is still in beta, so every version is 0.x until the 1.0 release. Smal
 
 ---
 
-## 0.6 (beta) - 8 October 2026
+## 0.6 (beta) - 9 October 2026
 
 ### Added
 - **Element colour schemes.** Choose Classic, Air (Cool Monochrome), Fire (Midnight Jewel), Water (Ocean Gradient), Earth (Autumn Leaves) or Storm (Noir Neon). Each has a light and a dark version, and every character keeps their own choice. Find it under menu, then Appearance.
