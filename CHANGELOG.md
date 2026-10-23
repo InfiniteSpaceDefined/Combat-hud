@@ -8,6 +8,26 @@ Combat HUD is still in beta, so every version is 0.x until the 1.0 release. Smal
 
 ---
 
+## 0.7 (beta) - 23 October 2026
+
+### Added
+- **Spell descriptions.** Every spell sheet now opens with a Description: the level, school, full text and the higher-level or cantrip-upgrade note. The text comes from the free rules (SRD 5.2.1), with the required credit under About and credits in the menu. Spells that are not in the free rules say so and offer a D&D Beyond search link. If your sheet lists the older 2014 version of a spell, a note says the text shown is the 2024 wording.
+- **My spells and Choose spells.** For classes that pick spells from a whole list (artificer, cleric, druid, paladin, wizard), D&D Beyond puts the entire class list in the PDF. The Spells tab now opens on **My spells** (cantrips, always-prepared spells and the ones you have starred). **Choose spells** shows the full list so you can star the ones you prepared, with a running count. Sorcerers, bards and similar classes are unchanged.
+- **Dice roller.** A **d20** button beside the menu opens a free roller with d4, d6, d8, d10, d12, d20 and d100, a dice count, a bonus you can type, and advantage on a single d20. It keeps recent rolls, logs to the combat log, and works in "I roll my own" mode.
+- **Inventory you can use.** Tap any item in Gear. Healing potions (all four strengths) show the roll, heal you and come off the list. Rations, ammunition, scrolls, torches and other potions are used up one at a time, and acid, alchemist's fire and holy water roll their damage. Any item can be discarded or added to, and **Add an item** covers loot. The carried weight follows along, and used-up items sit under **Used up** so you can put one back.
+- **Undo from the log.** Every log line has an **Undo** button (two taps) that puts back what the action changed: spell slots, counters, hit points, temporary HP, potions, hit dice, Sneak Attack and Savage Attacker, and concentration. Actions that changed several things undo together. Undone lines stay in the log, struck through, and drop out of the summary and Copy log. Lines from before this update show **Remove** instead.
+- **Back up and restore.** Save a backup file, copy the backup as text, or restore from a file or pasted text, so characters survive a cleared browser or a new device. Restore can add only the characters you are missing, or replace everything.
+- **About and credits** in the menu, with the SRD 5.2.1 attribution.
+
+### Changed
+- Book codes such as "EE 156" and "PHB-2024 91" are no longer shown on spells and features.
+- Equipment rows in Gear are now tappable.
+
+### Fixed
+- Formatting marks (underscores and asterisks) no longer show in spell descriptions.
+
+---
+
 ## 0.6 (beta) - 9 October 2026
 
 ### Added
