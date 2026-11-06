@@ -8,6 +8,16 @@ Combat HUD is still in beta, so every version is 0.x until the 1.0 release. Smal
 
 ---
 
+## 0.7.1 (beta) - 6 November 2026
+
+### Added
+- **Divine Smite in the attack flow.** After a melee hit, a new **Divine Smite (optional)** step lets a Paladin add the smite to that hit. Pick the slot: 2d8 radiant at level 1 and 1d8 more for each level above it, with the slots left shown on each button. The free cast from Paladin's Smite is offered too. A **Target is a Fiend or Undead** toggle adds one more d8, and a critical hit doubles all the dice. The damage is added to the attack total, the slot is spent and the log line says which slot was used. Remove it, change the hit to a miss, or Undo the log line to get the slot back. It only shows for characters with Divine Smite prepared, and only for melee weapons and unarmed strikes.
+
+### Fixed
+- **Divine Smite damage roll on the spell sheet.** The spell sheet said there was nothing to roll. It now rolls 2d8 radiant, adds 1d8 for each slot level above 1st, and has the same Fiend or Undead toggle and critical hit doubling.
+
+---
+
 ## 0.7 (beta) - 23 October 2026
 
 ### Added
