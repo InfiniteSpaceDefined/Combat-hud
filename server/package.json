@@ -1,0 +1,17 @@
+{
+  "name": "combat-hud-sessions",
+  "private": true,
+  "description": "Combat HUD shared sessions server (AWS CloudFormation). Dependencies here are for local tests only; the Lambda uses the AWS SDK built into the Node.js runtime.",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node test/ws.test.js && node test/kill.test.js"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-apigatewaymanagementapi": "3.1173.0",
+    "@aws-sdk/client-apigatewayv2": "3.1173.0",
+    "@aws-sdk/client-dynamodb": "3.1173.0",
+    "@aws-sdk/client-lambda": "3.1173.0",
+    "@aws-sdk/lib-dynamodb": "3.1173.0",
+    "dynalite": "4.0.0"
+  }
+}

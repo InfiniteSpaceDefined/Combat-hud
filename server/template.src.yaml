@@ -1,0 +1,334 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Combat HUD shared sessions (slice 1) - WebSocket API, one Lambda, one DynamoDB table. Free, unofficial D&D companion.
+
+Parameters:
+  AllowedOrigins:
+    Type: String
+    Default: https://infinitespacedefined.github.io
+    Description: Comma-separated browser origins allowed to connect (use * to allow any).
+  AlertEmail:
+    Type: String
+    Description: Email address for budget and kill-switch alerts (confirm the SNS email AWS sends you).
+  HostPassphrase:
+    Type: String
+    NoEcho: true
+    MinLength: 12
+    Description: Only someone who knows this can start a session (at least 12 characters).
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 5
+  SessionHours:
+    Type: Number
+    Default: 24
+    MinValue: 1
+    MaxValue: 72
+  MaxSeats:
+    Type: Number
+    Default: 5
+    Description: Seats per session including the DM.
+  ThrottleRate:
+    Type: Number
+    Default: 5
+    Description: Steady messages per second across the whole API.
+  ThrottleBurst:
+    Type: Number
+    Default: 10
+  ReservedConcurrency:
+    Type: Number
+    Default: 2
+    Description: Max concurrent Lambda runs (0 = no reservation).
+  KillSwitchMessages:
+    Type: Number
+    Default: 1000
+    Description: Stop everything if more than this many WebSocket messages arrive in 5 minutes (a busy game is about 200).
+  KillSwitchConnects:
+    Type: Number
+    Default: 100
+    Description: Stop everything if more than this many new connections arrive in 5 minutes.
+  LogRetentionDays:
+    Type: Number
+    Default: 7
+    AllowedValues: [1, 3, 5, 7, 14, 30]
+
+Conditions:
+  HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, 0]]
+
+Resources:
+  Table:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: pk, AttributeType: S }
+        - { AttributeName: sk, AttributeType: S }
+      KeySchema:
+        - { AttributeName: pk, KeyType: HASH }
+        - { AttributeName: sk, KeyType: RANGE }
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - { Key: app, Value: combat-hud }
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-ws
+      RetentionInDays: !Ref LogRetentionDays
+
+  FunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: combat-hud-ws
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:DeleteItem, dynamodb:Query]
+                Resource: !GetAtt Table.Arn
+              - Effect: Allow
+                Action: execute-api:ManageConnections
+                Resource: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/live/POST/@connections/*
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt LogGroup.Arn
+      Tags:
+        - { Key: app, Value: combat-hud }
+
+  Function:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-ws
+      Description: Combat HUD shared sessions WebSocket handler
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      Handler: index.handler
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt FunctionRole.Arn
+      ReservedConcurrentExecutions: !If [HasReservedConcurrency, !Ref ReservedConcurrency, !Ref AWS::NoValue]
+      LoggingConfig:
+        LogGroup: !Ref LogGroup
+      Environment:
+        Variables:
+          TABLE: !Ref Table
+          SESSION_HOURS: !Ref SessionHours
+          ALLOWED_ORIGINS: !Ref AllowedOrigins
+          MAX_SEATS: !Ref MaxSeats
+          HOST_PASSPHRASE: !Ref HostPassphrase
+      Tags:
+        - { Key: app, Value: combat-hud }
+      Code:
+        ZipFile: |
+__HANDLER__
+
+  Api:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub ${AWS::StackName}-ws
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.t
+      Tags: { app: combat-hud }
+
+  Integration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref Api
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${Function.Arn}/invocations
+
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref Api
+      RouteKey: $connect
+      Target: !Sub integrations/${Integration}
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref Api
+      RouteKey: $disconnect
+      Target: !Sub integrations/${Integration}
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref Api
+      RouteKey: $default
+      Target: !Sub integrations/${Integration}
+
+  Deployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn: [ConnectRoute, DisconnectRoute, DefaultRoute]
+    Properties:
+      ApiId: !Ref Api
+
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref Api
+      StageName: live
+      DeploymentId: !Ref Deployment
+      DefaultRouteSettings:
+        ThrottlingRateLimit: !Ref ThrottleRate
+        ThrottlingBurstLimit: !Ref ThrottleBurst
+      Tags: { app: combat-hud }
+
+  InvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref Function
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*
+
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Combat HUD alerts
+      Subscription:
+        - { Protocol: email, Endpoint: !Ref AlertEmail }
+      Tags:
+        - { Key: app, Value: combat-hud }
+
+  MessageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-too-many-messages
+      AlarmDescription: Kill switch - message flood on the Combat HUD WebSocket API
+      Namespace: AWS/ApiGateway
+      MetricName: MessageCount
+      Dimensions:
+        - { Name: ApiId, Value: !Ref Api }
+        - { Name: Stage, Value: live }
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: !Ref KillSwitchMessages
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+  ConnectAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-too-many-connects
+      AlarmDescription: Kill switch - connection flood on the Combat HUD WebSocket API
+      Namespace: AWS/ApiGateway
+      MetricName: ConnectCount
+      Dimensions:
+        - { Name: ApiId, Value: !Ref Api }
+        - { Name: Stage, Value: live }
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: !Ref KillSwitchConnects
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+  KillLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-killswitch
+      RetentionInDays: 30
+
+  KillRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: combat-hud-killswitch
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: apigateway:PATCH
+                Resource: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/${Api}/stages/live
+              - Effect: Allow
+                Action: [lambda:PutFunctionConcurrency, lambda:DeleteFunctionConcurrency]
+                Resource: !GetAtt Function.Arn
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt KillLogGroup.Arn
+      Tags:
+        - { Key: app, Value: combat-hud }
+
+  KillFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-killswitch
+      Description: Stops Combat HUD sessions traffic when an alarm fires
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 15
+      Role: !GetAtt KillRole.Arn
+      LoggingConfig:
+        LogGroup: !Ref KillLogGroup
+      Environment:
+        Variables:
+          API_ID: !Ref Api
+          STAGE: live
+          TARGET_FUNCTION: !Ref Function
+          THROTTLE_RATE: !Ref ThrottleRate
+          THROTTLE_BURST: !Ref ThrottleBurst
+          RESERVED_CONCURRENCY: !Ref ReservedConcurrency
+      Tags:
+        - { Key: app, Value: combat-hud }
+      Code:
+        ZipFile: |
+__KILLSWITCH__
+
+  KillPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref KillFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref AlertTopic
+
+  KillSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: lambda
+      Endpoint: !GetAtt KillFunction.Arn
+
+  Budget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub ${AWS::StackName}-monthly
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: { Amount: !Ref MonthlyBudgetUsd, Unit: USD }
+      NotificationsWithSubscribers:
+        - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80, ThresholdType: PERCENTAGE }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
+        - Notification: { NotificationType: FORECASTED, ComparisonOperator: GREATER_THAN, Threshold: 100, ThresholdType: PERCENTAGE }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
+
+Outputs:
+  WebSocketUrl:
+    Description: Paste this into the app (wss URL)
+    Value: !Sub wss://${Api}.execute-api.${AWS::Region}.amazonaws.com/live
+  TableName:
+    Value: !Ref Table
+  ReviveCommand:
+    Description: Run this to turn traffic back on after the kill switch fires
+    Value: !Sub aws lambda invoke --region ${AWS::Region} --function-name ${KillFunction} --payload '{"action":"revive"}' --cli-binary-format raw-in-base64-out revive.json

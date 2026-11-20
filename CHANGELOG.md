@@ -8,6 +8,19 @@ Combat HUD is still in beta, so every version is 0.x until the 1.0 release. Smal
 
 ---
 
+## 0.8.0 (beta) - 20 November 2026
+
+### Added
+- **Shared sessions (optional).** Menu, then **Join or host a session**. The DM starts a session with the host passphrase and gets a 6-character code; players join with the code. The app still works on its own and offline without it.
+- **Party HP strip and shared feed.** While in a session, everyone's HP, who is down, who is concentrating and who is offline sit under the header. Tap it for the session screen: each character's HP, AC, speed, spell slots and effects, plus a shared feed of damage, healing, spell slots used and concentration. Your character updates by itself as you play, and the app reconnects on its own if the connection drops.
+- **DM choice of HP view.** Players see each other's exact HP or just a bar. The DM always sees exact numbers, and each player always sees their own.
+- **Session server** in `server/`: one CloudFormation stack (API Gateway WebSocket, Lambda, DynamoDB) with a host passphrase, a 5-seat limit, throttling, rate limits, a budget alert and an automatic kill switch. See `server/README.md`.
+
+### Privacy
+- Only play data is shared: name, class and level, HP, AC, speed, spell slots, active effects, concentration, death saves and spell names. Your D&D Beyond PDF, the rest of your sheet and your backups never leave your device. Sessions and their data are deleted after 24 hours.
+
+---
+
 ## 0.7.1 (beta) - 6 November 2026
 
 ### Added
