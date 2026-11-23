@@ -1,7 +1,8 @@
 'use strict';
 // Combat HUD kill switch. Triggered by the CloudWatch alarms (via SNS): stops all traffic by
 // setting the API throttle to 0 and the handler Lambda's concurrency to 0.
-// Turn it back on with: aws lambda invoke --function-name <stack>-killswitch --payload '{"action":"revive"}' --cli-binary-format raw-in-base64-out out.json
+// Also an on/off switch for between games: invoke with {"action":"stop"} to turn traffic off and
+// {"action":"revive"} to turn it back on (see the StopCommand and ReviveCommand stack outputs).
 const { ApiGatewayV2Client, UpdateStageCommand } = require('@aws-sdk/client-apigatewayv2');
 const { LambdaClient, PutFunctionConcurrencyCommand, DeleteFunctionConcurrencyCommand } = require('@aws-sdk/client-lambda');
 
@@ -21,6 +22,7 @@ async function setTraffic(on) {
 
 exports.handler = async (ev) => {
   if (ev && ev.action === 'revive') { await setTraffic(true); console.log('revived'); return { revived: true }; }
+  if (ev && ev.action === 'stop') { await setTraffic(false); console.log('stopped by hand'); return { stopped: true }; }
   let alarmed = false, names = [];
   for (const r of (ev && ev.Records) || []) {
     try {

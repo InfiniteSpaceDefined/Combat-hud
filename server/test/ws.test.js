@@ -208,6 +208,74 @@ const char = (o) => Object.assign({ name: 'Kenneth', cls: 'Paladin', level: 5, h
     assert.equal(last('s1').t, 'welcome');
     await call('s6', { t: 'join', code }); assert.equal(last('s6').code, 'full');
   });
+  await test('encounter: only the DM adds enemies; players get names only and hidden ones not at all', async () => {
+    await call('dmE', { t: 'join', code, hostToken }); assert.equal(last('dmE').t, 'welcome');
+    await call('pE', { t: 'join', code, seatId: A.seatId, seatToken: A.seatToken }); assert.equal(last('pE').t, 'welcome'); take('dmE'); take('pE');
+    await call('pE', { t: 'npc.add', list: [{ name: 'Goblin', hp: 7, init: 12 }] }); assert.equal(last('pE').code, 'not_dm');
+    await call('dmE', { t: 'npc.add', list: [{ name: 'Goblin 1', hp: 7, ac: 15, init: 14 }, { name: 'Goblin 2', hp: 7, ac: 15, init: 9 }, { name: 'Ogre (hidden)', hp: 59, ac: 11, init: 20, hidden: true }] });
+    const d = last('dmE'); assert.equal(d.t, 'enc');
+    assert.equal(Object.keys(d.enc.npcs).length, 3); assert.equal(d.enc.order[0].init, 20);
+    const pv = last('pE').enc;
+    assert.deepEqual(pv.order.map(o => o.name), ['Goblin 1', 'Goblin 2']);
+    assert.ok(pv.order.every(o => !('hp' in o) && !('ac' in o) && !('init' in o)));
+    assert.equal(pv.npcs, undefined); assert.ok(!JSON.stringify(pv).includes('Ogre'));
+  });
+  await test('encounter: players roll their own initiative; DM can set anyone\'s', async () => {
+    await call('pE', { t: 'roll', init: 17 }); const pv = last('pE').enc;
+    assert.deepEqual(pv.order.map(o => o.ref.startsWith('s:') ? 'me' : o.name), ['me', 'Goblin 1', 'Goblin 2']);
+    await call('pE', { t: 'roll', init: 99 }); assert.equal(last('pE').code, 'bad_msg');
+    await call('pE', { t: 'init.set', ref: 'n:x', init: 1 }); assert.equal(last('pE').code, 'not_dm');
+    await call('dmE', { t: 'init.set', ref: 's:' + A.seatId, init: 8 }); take('pE');
+    const dv = last('dmE').enc; assert.equal(dv.order.find(o => o.ref === 's:' + A.seatId).init, 8);
+    await call('dmE', { t: 'init.set', ref: 's:nobody', init: 8 }); assert.equal(last('dmE').code, 'bad_msg');
+  });
+  await test('encounter: turns go in order, wrap to a new round, and a hidden enemy\'s turn is hidden from players', async () => {
+    await call('dmE', { t: 'combat', action: 'start' });
+    let d = last('dmE').enc, p = last('pE').enc;
+    assert.equal(d.active, true); assert.equal(d.round, 1); assert.equal(d.npcs[d.cur.slice(2)].name, 'Ogre (hidden)');
+    assert.equal(p.cur, null); assert.equal(p.hiddenTurn, true);
+    await call('dmE', { t: 'turn', dir: 'next' }); d = last('dmE').enc; p = last('pE').enc;
+    assert.equal(d.npcs[d.cur.slice(2)].name, 'Goblin 1'); assert.equal(p.hiddenTurn, false);
+    assert.equal(p.order.find(o => o.ref === p.cur).name, 'Goblin 1');
+    for (let i = 0; i < 3; i++) await call('dmE', { t: 'turn', dir: 'next' });
+    d = last('dmE').enc; assert.equal(d.round, 2); assert.equal(d.order[0].ref, d.cur);
+    await call('dmE', { t: 'turn', dir: 'prev' }); d = last('dmE').enc; assert.equal(d.round, 1); assert.equal(d.order[d.order.length - 1].ref, d.cur);
+    take('pE');
+  });
+  await test('encounter: enemy HP, conditions and reveal; bad values refused; players never see them', async () => {
+    let d = last('dmE') || {}; await call('dmE', { t: 'turn', dir: 'next' }); d = last('dmE').enc;
+    const g1 = Object.values(d.npcs).find(n => n.name === 'Goblin 1'), og = Object.values(d.npcs).find(n => /Ogre/.test(n.name));
+    await call('dmE', { t: 'npc.set', id: g1.id, hp: 2, conds: ['Prone', 'Frightened'] }); d = last('dmE').enc;
+    assert.equal(d.npcs[g1.id].hp, 2); assert.deepEqual(d.npcs[g1.id].conds, ['Prone', 'Frightened']);
+    const p = last('pE').enc; assert.ok(!JSON.stringify(p).includes('Prone') && !JSON.stringify(p).includes('"hp"'));
+    await call('dmE', { t: 'npc.set', id: g1.id, conds: ['<script>'] }); assert.equal(last('dmE').code, 'bad_msg');
+    await call('dmE', { t: 'npc.set', id: g1.id, name: '<img>' }); assert.equal(last('dmE').code, 'bad_msg');
+    await call('dmE', { t: 'npc.set', id: 'nope', hp: 1 }); assert.equal(last('dmE').code, 'not_found');
+    await call('dmE', { t: 'npc.set', id: og.id, hidden: false }); take('dmE');
+    assert.ok(last('pE').enc.order.some(o => /Ogre/.test(o.name)));
+  });
+  await test('encounter: removing the enemy whose turn it is moves the turn on; ending clears everything', async () => {
+    await call('dmE', { t: 'npc.add', list: [{ name: 'Rat', hp: 1, init: 50 }] }); let d = last('dmE').enc; take('pE');
+    const rat = Object.values(d.npcs).find(n => n.name === 'Rat');
+    await call('dmE', { t: 'init.set', ref: 'n:' + rat.id, init: 50 }); take('dmE'); take('pE');
+    // force the turn onto the rat, then delete it
+    for (let i = 0; i < 10 && last('dmE') !== null; i++) { await call('dmE', { t: 'turn', dir: 'next' }); d = last('dmE').enc; if (d.cur === 'n:' + rat.id) break; }
+    assert.equal(d.cur, 'n:' + rat.id);
+    await call('dmE', { t: 'npc.del', id: rat.id }); d = last('dmE').enc;
+    assert.ok(!d.npcs[rat.id]); assert.ok(d.cur && d.cur !== 'n:' + rat.id);
+    await call('dmE', { t: 'combat', action: 'end' }); d = last('dmE').enc;
+    assert.equal(d.active, false); assert.equal(d.order.length, 0); assert.equal(Object.keys(d.npcs).length, 0);
+    assert.equal(last('pE').enc.order.length, 0);
+  });
+  await test('encounter: limits (10 per add, 30 total) and the snapshot carries the encounter', async () => {
+    await call('dmE', { t: 'npc.add', list: Array(11).fill({ name: 'X', hp: 1, init: 1 }) }); assert.equal(last('dmE').code, 'bad_msg');
+    for (let i = 0; i < 3; i++) await call('dmE', { t: 'npc.add', list: Array(10).fill({ name: 'Zombie', hp: 22, init: 3 }) });
+    take('dmE');
+    await call('dmE', { t: 'npc.add', list: [{ name: 'One too many', hp: 1, init: 1 }] }); assert.equal(last('dmE').code, 'too_many');
+    await call('late2', { t: 'join', code, hostToken }); const w = last('late2');
+    assert.equal(Object.keys(w.snapshot.enc.npcs).length, 30);
+    await call('dmE', { t: 'combat', action: 'end' }); take('dmE');
+  });
   await test('expired session: join and messages refused', async () => {
     await doc.send(new UpdateCommand({ TableName: 'hud', Key: { pk: 'S#' + code, sk: 'META' }, UpdateExpression: 'SET expiresAt = :e', ExpressionAttributeValues: { ':e': 1 } }));
     await call('late', { t: 'join', code }); assert.equal(last('late').code, 'expired');

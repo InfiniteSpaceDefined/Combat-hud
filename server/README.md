@@ -48,6 +48,17 @@ Then:
 | `MonthlyBudgetUsd` | 5 | |
 | `LogRetentionDays` | 7 | |
 
+## Turning it off between games
+
+Nothing can cost you anything while traffic is off. Use the **StopCommand** output after a game:
+
+```
+aws lambda invoke --region eu-west-2 --function-name <stack>-killswitch \
+  --payload '{"action":"stop"}' --cli-binary-format raw-in-base64-out stop.json
+```
+
+Before the next game, run the **ReviveCommand** (below). In the console you can do the same thing from the kill-switch Lambda's **Test** tab, with the event `{"action":"stop"}` or `{"action":"revive"}`.
+
 ## If the kill switch fires
 
 You'll get an email. All traffic is stopped: the throttle is set to 0 and the Lambda concurrency to 0. Once things are quiet, turn it back on with the **ReviveCommand** from the stack outputs:

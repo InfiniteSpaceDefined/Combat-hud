@@ -8,6 +8,23 @@ Combat HUD is still in beta, so every version is 0.x until the 1.0 release. Smal
 
 ---
 
+## 0.9.0 (beta) - 23 November 2026
+
+### Added
+- **DM screen, no character needed.** Start a session from the welcome screen, the character picker or the menu, and the app becomes a DM screen: join code, initiative, party and feed. A dashboard on laptops and tablets, tabs on phones.
+- **Enemies and initiative.** Add enemies by name, number, HP, AC and initiative bonus (several at once are numbered, each rolls d20 + bonus). Quick damage and heal, conditions, hide or show to players, remove. Start combat, next and previous turn, rounds counted, end combat clears the fight.
+- **Players' initiative and turn order.** Players roll (d20 + their bonus) or type their initiative and it goes straight to the DM. A turn-order bar shows who is up and who is next, with a "Your turn!" alert.
+- **DM prep, offline.** Build an encounter ahead of time with no connection; it is saved on the device and sent to the session when you start one.
+- **Server off switch** for between games (`stop` and `revive`; see `server/README.md`).
+
+### Changed
+- Starting or joining a session now gives up after 15 seconds with a message, instead of waiting forever if the server does not answer.
+
+### Privacy
+- Players only ever see enemy names. Enemy HP, AC and conditions stay with the DM, and hidden enemies are not sent to players at all.
+
+---
+
 ## 0.8.0 (beta) - 20 November 2026
 
 ### Added

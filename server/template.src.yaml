@@ -329,6 +329,9 @@ Outputs:
     Value: !Sub wss://${Api}.execute-api.${AWS::Region}.amazonaws.com/live
   TableName:
     Value: !Ref Table
+  StopCommand:
+    Description: Run this to turn all session traffic off (for example between games)
+    Value: !Sub aws lambda invoke --region ${AWS::Region} --function-name ${KillFunction} --payload '{"action":"stop"}' --cli-binary-format raw-in-base64-out stop.json
   ReviveCommand:
-    Description: Run this to turn traffic back on after the kill switch fires
+    Description: Run this to turn traffic back on (after StopCommand or the kill switch)
     Value: !Sub aws lambda invoke --region ${AWS::Region} --function-name ${KillFunction} --payload '{"action":"revive"}' --cli-binary-format raw-in-base64-out revive.json

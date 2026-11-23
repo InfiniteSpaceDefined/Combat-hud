@@ -29,6 +29,16 @@ srv.listen(48010, async () => {
     assert.deepEqual(st.b.defaultRouteSettings, { throttlingRateLimit: 20, throttlingBurstLimit: 40 });
     assert.equal(reqs.find(r => r.u.includes('concurrency')).b.ReservedConcurrentExecutions, 10);
   });
+  await test('stop by hand: same as an alarm (throttle 0, concurrency 0)', async () => {
+    process.env.RESERVED_CONCURRENCY = '10';
+    assert.deepEqual(await K.handler({ action: 'stop' }), { stopped: true });
+    const st = reqs.find(r => r.u === '/v2/apis/abc123/stages/live');
+    assert.deepEqual(st.b.defaultRouteSettings, { throttlingRateLimit: 0, throttlingBurstLimit: 0 });
+    assert.equal(reqs.find(r => r.u.includes('concurrency')).b.ReservedConcurrentExecutions, 0);
+  });
+  await test('unknown actions do nothing', async () => {
+    assert.deepEqual(await K.handler({ action: 'explode' }), { stopped: false }); assert.equal(reqs.length, 0);
+  });
   await test('revive with ReservedConcurrency 0: removes the reservation', async () => {
     process.env.RESERVED_CONCURRENCY = '0';
     await K.handler({ action: 'revive' });

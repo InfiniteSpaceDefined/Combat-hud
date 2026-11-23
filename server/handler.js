@@ -148,12 +148,123 @@ function diff(a, b) {
   return ev;
 }
 
+// ---- encounter: enemies + initiative (slice 2) ----
+// One ENC item per session. The DM is the only writer, except that a player may set their own initiative.
+// Players get names and turn order only: no enemy HP/AC/conditions, and hidden enemies are left out entirely.
+const CONDS = ['Blinded', 'Charmed', 'Deafened', 'Exhaustion', 'Frightened', 'Grappled', 'Incapacitated', 'Invisible', 'Paralyzed', 'Petrified', 'Poisoned', 'Prone', 'Restrained', 'Stunned', 'Unconscious'];
+const NPC_MAX = 30;
+const encEmpty = () => ({ npcs: {}, order: [], cur: null, round: 0, active: false, rev: 0 });
+function encSort(e) { e.order.sort((a, b) => (b.init - a.init) || (b.tb - a.tb)); }
+function npcName(v) { return isStr(v, 40) ? v.trim() : null; }
+async function encLoad(code) { const it = await get(P(code), 'ENC'); return it ? it.enc : encEmpty(); }
+// Read-modify-write with an optimistic check on rev; retries a few times on a clash.
+async function encChange(code, meta, fn) {
+  for (let i = 0; i < 4; i++) {
+    const it = await get(P(code), 'ENC'), e = it ? it.enc : encEmpty(), prev = e.rev;
+    const r = fn(e);
+    if (r) return { err: r };
+    e.rev = prev + 1; encSort(e);
+    try {
+      await put({ pk: P(code), sk: 'ENC', enc: e, ttl: meta.expiresAt + 3600 }, it ? 'enc.rev = :r' : 'attribute_not_exists(pk)', it ? { ':r': prev } : undefined);
+      return { enc: e };
+    } catch (x) { if (x.name !== 'ConditionalCheckFailedException') throw x; }
+  }
+  return { err: 'busy' };
+}
+function encView(e, viewer) {
+  if (viewer.role === 'dm') return e;
+  const vis = r => r.startsWith('s:') || (e.npcs[r.slice(2)] && !e.npcs[r.slice(2)].hidden);
+  const order = e.order.filter(o => vis(o.ref)).map(o => o.ref.startsWith('s:') ? { ref: o.ref, init: o.init } : { ref: o.ref, name: e.npcs[o.ref.slice(2)].name });
+  const cur = e.cur && vis(e.cur) ? e.cur : null;
+  return { active: e.active, round: e.round, order, cur, hiddenTurn: !!(e.active && e.cur && !cur), rev: e.rev };
+}
+function step(e, dir) {
+  if (!e.order.length) { e.cur = null; return; }
+  const i = e.order.findIndex(o => o.ref === e.cur);
+  if (i < 0) { e.cur = e.order[0].ref; if (!e.round) e.round = 1; return; }
+  let j = i + (dir === 'prev' ? -1 : 1);
+  if (j >= e.order.length) { j = 0; e.round++; }
+  if (j < 0) { if (e.round > 1) { j = e.order.length - 1; e.round--; } else j = 0; }
+  e.cur = e.order[j].ref;
+}
+function removeRef(e, ref) {
+  const i = e.order.findIndex(o => o.ref === ref);
+  if (i < 0) return;
+  if (e.cur === ref) e.cur = e.order.length > 1 ? e.order[(i + 1) % e.order.length].ref : null;
+  e.order.splice(i, 1);
+}
+function setInit(e, ref, init) {
+  const o = e.order.find(x => x.ref === ref);
+  if (o) o.init = init; else e.order.push({ ref, init, tb: Math.random() });
+}
+async function encounter(ev, connId, conn, meta, msg) {
+  const t = msg.t, dm = conn.role === 'dm';
+  if (t !== 'roll' && !dm) return send(ev, connId, err('not_dm', t));
+  const seats = t === 'init.set' ? await query(P(conn.code), 'SEAT#') : null;
+  const res = await encChange(conn.code, meta, e => {
+    if (t === 'roll') {
+      if (conn.role !== 'player' || !isInt(msg.init, -10, 50)) return 'bad_msg';
+      setInit(e, 's:' + conn.seatId, msg.init); return null;
+    }
+    if (t === 'npc.add') {
+      if (!Array.isArray(msg.list) || !msg.list.length || msg.list.length > 10) return 'bad_msg';
+      if (Object.keys(e.npcs).length + msg.list.length > NPC_MAX) return 'too_many';
+      for (const n of msg.list) {
+        const name = isObj(n) && npcName(n.name);
+        if (!name || !isInt(n.hp, 0, 9999) || !(n.ac == null || isInt(n.ac, 0, 99)) || !isInt(n.init, -10, 50) || !(n.hidden == null || typeof n.hidden === 'boolean')) return 'bad_msg';
+      }
+      for (const n of msg.list) {
+        let id; do { id = rnd(4); } while (e.npcs[id]);
+        e.npcs[id] = { id, name: npcName(n.name), hp: n.hp, hpMax: n.hp, ac: n.ac == null ? null : n.ac, conds: [], hidden: !!n.hidden };
+        setInit(e, 'n:' + id, n.init);
+      }
+      return null;
+    }
+    if (t === 'npc.set') {
+      const n = okId(msg.id) && e.npcs[msg.id];
+      if (!n) return 'not_found';
+      if (msg.name != null) { const nm = npcName(msg.name); if (!nm) return 'bad_msg'; n.name = nm; }
+      if (msg.hp != null) { if (!isInt(msg.hp, -999, 9999)) return 'bad_msg'; n.hp = msg.hp; }
+      if (msg.hpMax != null) { if (!isInt(msg.hpMax, 0, 9999)) return 'bad_msg'; n.hpMax = msg.hpMax; }
+      if (msg.ac != null) { if (!isInt(msg.ac, 0, 99)) return 'bad_msg'; n.ac = msg.ac; }
+      if (msg.hidden != null) { if (typeof msg.hidden !== 'boolean') return 'bad_msg'; n.hidden = msg.hidden; }
+      if (msg.conds != null) { if (!Array.isArray(msg.conds) || msg.conds.length > CONDS.length || !msg.conds.every(c => CONDS.includes(c))) return 'bad_msg'; n.conds = [...new Set(msg.conds)]; }
+      return null;
+    }
+    if (t === 'npc.del') {
+      if (!okId(msg.id) || !e.npcs[msg.id]) return 'not_found';
+      removeRef(e, 'n:' + msg.id); delete e.npcs[msg.id]; return null;
+    }
+    if (t === 'init.set' || t === 'init.del') {
+      const ref = typeof msg.ref === 'string' ? msg.ref : '';
+      const ok = (ref.startsWith('n:') && e.npcs[ref.slice(2)]) || (ref.startsWith('s:') && seats && seats.some(s => s.seatId === ref.slice(2) && s.role === 'player'));
+      if (t === 'init.del') { if (!e.order.some(o => o.ref === ref)) return 'not_found'; removeRef(e, ref); return null; }
+      if (!ok || !isInt(msg.init, -10, 50)) return 'bad_msg';
+      setInit(e, ref, msg.init); return null;
+    }
+    if (t === 'turn') {
+      if (msg.dir !== 'next' && msg.dir !== 'prev') return 'bad_msg';
+      if (!e.order.length) return 'empty';
+      if (!e.active) { e.active = true; e.round = 1; e.cur = null; encSort(e); e.cur = e.order[0].ref; return null; }
+      encSort(e); step(e, msg.dir); return null;
+    }
+    if (t === 'combat') {
+      if (msg.action === 'start') { if (!e.order.length) return 'empty'; encSort(e); e.active = true; e.round = 1; e.cur = e.order[0].ref; return null; }
+      if (msg.action === 'end') { Object.assign(e, encEmpty(), { rev: e.rev }); return null; }
+      return 'bad_msg';
+    }
+    return 'unknown';
+  });
+  if (res.err) return send(ev, connId, err(res.err, t));
+  await broadcast(ev, conn.code, c => ({ t: 'enc', enc: encView(res.enc, c) }));
+}
+
 // ---- session snapshot ----
 async function load(code) {
   const pk = P(code);
-  const [seats, chars, conns, feed] = await Promise.all([
-    query(pk, 'SEAT#'), query(pk, 'CHAR#'), query(pk, 'CONN#'), query(pk, 'FEED#', { desc: true, limit: FEED_KEEP })]);
-  return { seats, chars, conns, feed: feed.reverse() };
+  const [seats, chars, conns, feed, enc] = await Promise.all([
+    query(pk, 'SEAT#'), query(pk, 'CHAR#'), query(pk, 'CONN#'), query(pk, 'FEED#', { desc: true, limit: FEED_KEEP }), encLoad(code)]);
+  return { seats, chars, conns, feed: feed.reverse(), enc };
 }
 function view(raw, meta, viewer) {
   const online = new Set(raw.conns.map(c => c.seatId));
@@ -163,6 +274,7 @@ function view(raw, meta, viewer) {
     seats: raw.seats.map(s => ({ seatId: s.seatId, name: s.name, role: s.role, online: online.has(s.seatId) })),
     chars: raw.chars.map(c => viewChar(c, viewer, meta)),
     feed: raw.feed.map(f => viewFeed(f, viewer, meta)),
+    enc: encView(raw.enc || encEmpty(), viewer),
   };
 }
 async function attach(ev, connId, code, seat, exp) {
@@ -312,6 +424,7 @@ exports.handler = async (ev) => {
     if (!meta || meta.expiresAt <= now()) { await send(ev, connId, err('expired', msg.t)); return OK; }
     if (msg.t === 'char') await charUpdate(ev, connId, conn, meta, msg);
     else if (msg.t === 'settings') await settings(ev, connId, conn, meta, msg);
+    else if (['roll', 'npc.add', 'npc.set', 'npc.del', 'init.set', 'init.del', 'turn', 'combat'].includes(msg.t)) await encounter(ev, connId, conn, meta, msg);
     else await send(ev, connId, err('unknown', msg.t));
   } catch (e) {
     console.error('handler error', e && e.name, e && e.message);
@@ -320,4 +433,4 @@ exports.handler = async (ev) => {
   return OK;
 };
 // Exposed for tests only.
-exports._t = { diff, cleanChar, viewChar, viewFeed, newCode };
+exports._t = { diff, cleanChar, viewChar, viewFeed, newCode, encView, step };
